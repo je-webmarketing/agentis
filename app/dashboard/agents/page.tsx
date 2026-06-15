@@ -5,13 +5,24 @@ import DeleteAgentButton from "./delete-button"
 export default async function AgentsPage() {
   const { data: agents, error } = await supabase
     .from("agents")
-    .select("*")
+    .select(`
+      *,
+      poste:poste_id (
+        nom
+      ),
+      service_ref:service_id (
+        nom
+      ),
+      site:site_id (
+        nom
+      )
+    `)
     .order("id", { ascending: true })
 
   if (error) {
     return (
       <div className="min-h-screen bg-[#020817] p-8 text-red-500">
-        Erreur de chargement des agents
+        {error.message}
       </div>
     )
   }
@@ -50,11 +61,16 @@ export default async function AgentsPage() {
 
       <div className="bg-[#0f172a] border border-slate-800 rounded-2xl overflow-hidden">
         <div
-  className="bg-[#111827] border-b border-slate-800"
-  style={{ display: "grid", gridTemplateColumns: "2fr 2fr 1fr 1fr 1fr" }}
->
+          className="bg-[#111827] border-b border-slate-800"
+          style={{
+            display: "grid",
+            gridTemplateColumns: "2fr 1.5fr 1.5fr 1.5fr 1fr 1fr 1.5fr",
+          }}
+        >
           <div className="p-4">Nom</div>
+          <div className="p-4">Site</div>
           <div className="p-4">Service</div>
+          <div className="p-4">Poste</div>
           <div className="p-4">Statut</div>
           <div className="p-4">Temps</div>
           <div className="p-4">Actions</div>
@@ -64,12 +80,23 @@ export default async function AgentsPage() {
           <div
             key={agent.id}
             className="border-b border-slate-800 last:border-b-0"
-style={{ display: "grid", gridTemplateColumns: "2fr 2fr 1fr 1fr 1fr" }}
+            style={{
+              display: "grid",
+              gridTemplateColumns: "2fr 1.5fr 1.5fr 1.5fr 1fr 1fr 1.5fr",
+            }}
           >
             <div className="p-4 font-medium">{agent.nom}</div>
 
             <div className="p-4 text-slate-300">
-              {agent.service}
+              {agent.site?.nom || "Non renseigné"}
+            </div>
+
+            <div className="p-4 text-slate-300">
+              {agent.service_ref?.nom || agent.service || "Non renseigné"}
+            </div>
+
+            <div className="p-4 text-slate-300">
+              {agent.poste?.nom || "Non renseigné"}
             </div>
 
             <div className="p-4">
@@ -83,15 +110,15 @@ style={{ display: "grid", gridTemplateColumns: "2fr 2fr 1fr 1fr 1fr" }}
             </div>
 
             <div className="p-4 flex gap-2">
-  <Link
-    href={`/dashboard/agents/${agent.id}`}
-    className="px-3 py-1 rounded-lg bg-blue-500 text-white text-sm"
-  >
-    Modifier
-  </Link>
+              <Link
+                href={`/dashboard/agents/${agent.id}`}
+                className="px-3 py-1 rounded-lg bg-blue-500 text-white text-sm"
+              >
+                Modifier
+              </Link>
 
-  <DeleteAgentButton id={agent.id} />
-</div>
+              <DeleteAgentButton id={agent.id} />
+            </div>
           </div>
         ))}
       </div>
