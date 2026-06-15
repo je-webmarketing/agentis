@@ -15,10 +15,6 @@ import Link from "next/link"
 import Image from "next/image"
 import { redirect } from "next/navigation";
 
-export default function HomePage() {
-  redirect("/dashboard");
-}
-
 export default async function DashboardPage() {
   const today = new Date()
   const in14Days = new Date()
