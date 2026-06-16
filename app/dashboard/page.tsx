@@ -181,8 +181,8 @@ export default async function DashboardPage() {
   ]
 
   return (
-    <div className="min-h-screen bg-[#020817] text-slate-100 flex">
-      <aside className="w-72 bg-[#050505] border-r border-yellow-500/20 p-6 flex flex-col">
+    <div className="min-h-screen bg-[#020817] text-slate-100 lg:flex">
+  <aside className="hidden lg:flex w-72 bg-[#050505] border-r border-yellow-500/20 p-6 flex-col">
         <div className="mb-10">
           <Image
             src="/logo-agentis-new.png"
@@ -228,8 +228,42 @@ export default async function DashboardPage() {
         </div>
       </aside>
 
-      <main className="flex-1 p-8 overflow-x-hidden">
-        <div className="flex justify-between items-center mb-8 border-b border-slate-800 pb-6">
+      <div className="lg:hidden bg-[#050505] border-b border-yellow-500/20 p-4">
+  <div className="flex items-center justify-between">
+    <Image
+      src="/logo-agentis-new.png"
+      alt="AGENTIS"
+      width={140}
+      height={60}
+      className="h-auto object-contain"
+      priority
+    />
+
+    <span className="text-xs text-yellow-400 border border-yellow-500/30 rounded-xl px-3 py-2">
+      Admin
+    </span>
+  </div>
+
+  <nav className="mt-4 flex gap-2 overflow-x-auto pb-2">
+    {menu.map((item) => {
+      const Icon = item.icon
+
+      return (
+        <Link
+          key={item.label}
+          href={item.href}
+          className="flex min-w-max items-center gap-2 rounded-xl border border-yellow-500/20 bg-[#111827] px-3 py-2 text-xs text-slate-300"
+        >
+          <Icon size={14} />
+          {item.label}
+        </Link>
+      )
+    })}
+  </nav>
+</div>
+
+      <main className="flex-1 p-4 lg:p-8 overflow-x-hidden">
+        <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4 mb-8 border-b border-slate-800 pb-6">
           <div>
             <p className="text-sm text-yellow-400 font-semibold mb-1">
               AGENTIS
@@ -255,7 +289,7 @@ export default async function DashboardPage() {
         <div
   className="grid gap-6"
   style={{
-    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
   }}
 >
           {kpis.map((item) => {
@@ -294,7 +328,8 @@ export default async function DashboardPage() {
             </h4>
 
             {absentsJour?.length ? (
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto">
+  <table className="w-full min-w-[700px] text-sm">
                 <thead>
                   <tr className="border-b border-slate-700">
                     <th className="text-left py-3">Agent</th>
@@ -332,6 +367,7 @@ export default async function DashboardPage() {
                   ))}
                 </tbody>
               </table>
+              </div>
             ) : (
               <p className="text-slate-400 text-sm">
                 Aucun agent absent ou remplacé sur cette journée.
