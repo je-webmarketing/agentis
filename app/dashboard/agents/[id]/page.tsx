@@ -153,7 +153,16 @@ export default function EditAgentPage() {
         .limit(8)
 
       setAbsences((absencesData || []) as AbsenceItem[])
-      setPlanning((planningData || []) as PlanningItem[])
+      const normalizedPlanning: PlanningItem[] = (planningData || []).map((item: any) => ({
+  id: item.id,
+  date: item.date,
+  heure_debut: item.heure_debut,
+  heure_fin: item.heure_fin,
+  statut: item.statut,
+  sites: Array.isArray(item.sites) ? item.sites[0] || null : item.sites || null,
+}))
+
+setPlanning(normalizedPlanning)
       setLoading(false)
     }
 
