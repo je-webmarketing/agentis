@@ -172,16 +172,29 @@ setPlanning(normalizedPlanning)
   async function modifierAgent() {
     setSaving(true)
 
-    const { error } = await supabase
-      .from("agents")
-      .update({
-        nom,
-        statut,
-        temps,
-        poste_id: posteId ? Number(posteId) : null,
-        service_id: serviceId ? Number(serviceId) : null,
-        site_id: siteId ? Number(siteId) : null,
-      })
+   
+     const selectedServiceName =
+  services.find((service) => String(service.id) === serviceId)?.nom || null
+
+const selectedPosteName =
+  postes.find((poste) => String(poste.id) === posteId)?.nom || null
+
+const selectedSiteName =
+  sites.find((site) => String(site.id) === siteId)?.nom || null
+
+const { error } = await supabase
+  .from("agents")
+  .update({
+    nom,
+    statut,
+    temps,
+    service: selectedServiceName,
+    poste_id: posteId ? Number(posteId) : null,
+    service_id: serviceId ? Number(serviceId) : null,
+    site_id: siteId ? Number(siteId) : null,
+  })
+  .eq("id", id)
+  .select()
       .eq("id", id)
 
     setSaving(false)
@@ -191,6 +204,7 @@ setPlanning(normalizedPlanning)
       alert("Erreur modification")
       return
     }
+    alert("Agent modifié avec succès")
 
     router.push("/dashboard/agents")
     router.refresh()
