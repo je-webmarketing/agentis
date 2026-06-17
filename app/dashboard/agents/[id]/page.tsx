@@ -169,46 +169,46 @@ setPlanning(normalizedPlanning)
     loadData()
   }, [id])
 
-  async function modifierAgent() {
-    setSaving(true)
+ async function modifierAgent() {
+  setSaving(true)
 
-   
-     const selectedServiceName =
-  services.find((service) => String(service.id) === serviceId)?.nom || null
+  const selectedServiceName =
+    services.find((service) => String(service.id) === serviceId)?.nom || null
 
-const selectedPosteName =
-  postes.find((poste) => String(poste.id) === posteId)?.nom || null
+  const { data, error } = await supabase
+    .from("agents")
+    .update({
+      nom,
+      statut,
+      temps,
+      service: selectedServiceName,
+      poste_id: posteId ? Number(posteId) : null,
+      service_id: serviceId ? Number(serviceId) : null,
+      site_id: siteId ? Number(siteId) : null,
+    })
+    .eq("id", Number(id))
+    .select()
+    .single()
 
-const selectedSiteName =
-  sites.find((site) => String(site.id) === siteId)?.nom || null
+  setSaving(false)
 
-const { error } = await supabase
-  .from("agents")
-  .update({
-    nom,
-    statut,
-    temps,
-    service: selectedServiceName,
-    poste_id: posteId ? Number(posteId) : null,
-    service_id: serviceId ? Number(serviceId) : null,
-    site_id: siteId ? Number(siteId) : null,
-  })
-  .eq("id", id)
-  .select()
-      .eq("id", id)
-
-    setSaving(false)
-
-    if (error) {
-      console.error(error)
-      alert("Erreur modification")
-      return
-    }
-    alert("Agent modifié avec succès")
-
-    router.push("/dashboard/agents")
-    router.refresh()
+  if (error) {
+    console.error(error)
+    alert("Erreur modification : " + error.message)
+    return
   }
+
+  setNom(data.nom || "")
+  setStatut(data.statut || "Actif")
+  setTemps(data.temps || "35h")
+  setPosteId(data.poste_id ? String(data.poste_id) : "")
+  setServiceId(data.service_id ? String(data.service_id) : "")
+  setSiteId(data.site_id ? String(data.site_id) : "")
+
+  alert("Agent modifié avec succès")
+  router.refresh()
+  router.push("/dashboard/agents")
+}
 
   if (loading) {
     return (

@@ -2,6 +2,9 @@ import Link from "next/link"
 import { supabase } from "@/lib/supabase"
 import DeleteAgentButton from "./delete-button"
 
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
 export default async function AgentsPage() {
   const { data: agents, error } = await supabase
     .from("agents")
