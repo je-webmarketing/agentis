@@ -9,11 +9,13 @@ import {
   BarChart3,
   LayoutDashboard,
   ShieldCheck,
+  Building2,
+  MapPin,
 } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import Link from "next/link"
 import Image from "next/image"
-import { redirect } from "next/navigation";
+
 
 export default async function DashboardPage() {
   const today = new Date()
@@ -24,14 +26,18 @@ export default async function DashboardPage() {
   const limitIso = in14Days.toISOString().split("T")[0]
 
   const menu = [
-    { label: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
-    { label: "Planning", icon: CalendarDays, href: "/dashboard/planning" },
-    { label: "Congés", icon: CalendarOff, href: "/dashboard/absences" },
-    { label: "Agents", icon: UserRound, href: "/dashboard/agents" },
-    { label: "Temps & 1607h", icon: ClockAlert, href: "/dashboard/temps" },
-    { label: "Documents", icon: Folder, href: "/dashboard/documents" },
-    { label: "Rapports", icon: BarChart3, href: "/dashboard/rapports" },
-  ]
+  { label: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
+  { label: "Planning", icon: CalendarDays, href: "/dashboard/planning" },
+  { label: "Congés", icon: CalendarOff, href: "/dashboard/absences" },
+  { label: "Agents", icon: UserRound, href: "/dashboard/agents" },
+
+  { label: "Structures", icon: Building2, href: "/dashboard/structures" },
+  { label: "Sites", icon: MapPin, href: "/dashboard/sites" },
+
+  { label: "Temps & 1607h", icon: ClockAlert, href: "/dashboard/temps" },
+  { label: "Documents", icon: Folder, href: "/dashboard/documents" },
+  { label: "Rapports", icon: BarChart3, href: "/dashboard/rapports" },
+]
 
   const { data: latestPlanning } = await supabase
     .from("planning_journalier")
@@ -123,6 +129,10 @@ export default async function DashboardPage() {
       ? Math.round(((presents + remplaces) / totalAgentsJour) * 100)
       : 0
 
+  const { count: structuresCount } = await supabase
+  .from("structures")
+  .select("*", { count: "exact", head: true })    
+
   const kpis = [
     {
       label: "Effectif du jour",
@@ -178,11 +188,18 @@ export default async function DashboardPage() {
       color: "text-blue-400",
       icon: FileCheck2,
     },
+   {
+  label: "Structures",
+  value: String(structuresCount || 0),
+  color: "text-yellow-400",
+  icon: Building2,
+  href: "/dashboard/structures",
+},
   ]
 
   return (
-    <div className="min-h-screen bg-[#020817] text-slate-100 lg:flex">
-  <aside className="hidden lg:flex w-72 bg-[#050505] border-r border-yellow-500/20 p-6 flex-col">
+    <div className="min-h-screen bg-[#020817] text-slate-100 flex">
+      <aside className="w-72 bg-[#050505] border-r border-yellow-500/20 p-6 flex flex-col">
         <div className="mb-10">
           <Image
             src="/logo-agentis-new.png"
@@ -211,59 +228,53 @@ export default async function DashboardPage() {
           })}
         </nav>
 
-        <div className="mt-auto pt-6 pb-6 border-t border-yellow-500/20 text-xs text-[#CFC7B0]">
-          <p className="font-semibold text-yellow-400">AGENTIS v1.0</p>
+       <div className="mt-auto pt-6 border-t border-yellow-500/20 text-center">
 
-          <p>
-            By{" "}
-            <a
-              href="https://ericjarry34.systeme.io/je-webmarketing"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-yellow-400 hover:text-yellow-300 underline underline-offset-4"
-            >
-              JE-Webmarketing
-            </a>
-          </p>
-        </div>
-      </aside>
+  <p className="font-semibold text-yellow-400 text-sm">
+    AGENTIS v1.0
+  </p>
 
-      <div className="lg:hidden bg-[#050505] border-b border-yellow-500/20 p-4">
-  <div className="flex items-center justify-between">
-    <Image
-      src="/logo-agentis-new.png"
-      alt="AGENTIS"
-      width={140}
-      height={60}
-      className="h-auto object-contain"
-      priority
-    />
+  <p className="mt-3 text-xs text-slate-500">
+    Développé avec ❤️ par
+  </p>
 
-    <span className="text-xs text-yellow-400 border border-yellow-500/30 rounded-xl px-3 py-2">
-      Admin
-    </span>
+  <div className="mt-3 flex justify-center items-center gap-3 flex-wrap">
+
+    <a
+      href="https://ericjarry34.systeme.io/je-webmarketing"
+      target="_blank"
+      rel="noopener noreferrer"
+      className="font-semibold text-yellow-400 hover:text-yellow-300 transition-colors"
+    >
+      JE-Webmarketing
+    </a>
+
+    <span className="text-slate-600">|</span>
+
+    <a
+      href="https://www.optimavis-e-reputation.com"
+      target="_blank"
+      rel="noopener noreferrer"
+      className="font-semibold text-cyan-400 hover:text-cyan-300 transition-colors"
+    >
+      Optim'Avis Client
+    </a>
+
   </div>
 
-  <nav className="mt-4 flex gap-2 overflow-x-auto pb-2">
-    {menu.map((item) => {
-      const Icon = item.icon
+  <p className="mt-3 text-[11px] text-slate-500">
+    Développement logiciel • Marketing Digital • E-Réputation
+  </p>
 
-      return (
-        <Link
-          key={item.label}
-          href={item.href}
-          className="flex min-w-max items-center gap-2 rounded-xl border border-yellow-500/20 bg-[#111827] px-3 py-2 text-xs text-slate-300"
-        >
-          <Icon size={14} />
-          {item.label}
-        </Link>
-      )
-    })}
-  </nav>
+  <p className="mt-2 text-[11px] text-slate-600">
+    © 2026 AGENTIS — Tous droits réservés
+  </p>
+
 </div>
+      </aside>
 
-      <main className="flex-1 p-4 lg:p-8 overflow-x-hidden">
-        <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4 mb-8 border-b border-slate-800 pb-6">
+      <main className="flex-1 p-8 overflow-x-hidden">
+        <div className="flex justify-between items-center mb-8 border-b border-slate-800 pb-6">
           <div>
             <p className="text-sm text-yellow-400 font-semibold mb-1">
               AGENTIS
@@ -289,32 +300,46 @@ export default async function DashboardPage() {
         <div
   className="grid gap-6"
   style={{
-    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
   }}
 >
           {kpis.map((item) => {
-            const Icon = item.icon
+  const Icon = item.icon
+  const cardContent = (
+    <div className="bg-[#0f172a] border border-slate-800 p-6 rounded-2xl shadow-lg hover:border-yellow-500/40 transition">
+      <div className="flex items-center justify-between">
+        <p className="text-slate-400 text-sm">{item.label}</p>
+        <Icon size={20} className={item.color} />
+      </div>
 
-            return (
-              <div
-                key={item.label}
-                className="bg-[#0f172a] border border-slate-800 p-6 rounded-2xl shadow-lg"
-              >
-                <div className="flex items-center justify-between">
-                  <p className="text-slate-400 text-sm">{item.label}</p>
-                  <Icon size={20} className={item.color} />
-                </div>
+      <h3 className={`text-4xl font-bold mt-4 ${item.color}`}>
+        {item.value}
+      </h3>
 
-                <h3 className={`text-4xl font-bold mt-4 ${item.color}`}>
-                  {item.value}
-                </h3>
+      <p className="text-xs text-slate-500 mt-2">
+        Mise à jour aujourd’hui
+      </p>
+    </div>
+  )
 
-                <p className="text-xs text-slate-500 mt-2">
-                  Mise à jour aujourd’hui
-                </p>
-              </div>
-            )
-          })}
+  if (item.label === "Structures") {
+    return (
+      <Link
+  key={item.label}
+  href="/dashboard/structures"
+  className="block cursor-pointer"
+>
+        {cardContent}
+      </Link>
+    )
+  }
+
+  return (
+    <div key={item.label}>
+      {cardContent}
+    </div>
+  )
+})}
         </div>
 
         <div className="mt-8 bg-[#0f172a] border border-amber-500/30 rounded-2xl p-6">
@@ -328,8 +353,7 @@ export default async function DashboardPage() {
             </h4>
 
             {absentsJour?.length ? (
-              <div className="overflow-x-auto">
-  <table className="w-full min-w-[700px] text-sm">
+              <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-700">
                     <th className="text-left py-3">Agent</th>
@@ -367,7 +391,6 @@ export default async function DashboardPage() {
                   ))}
                 </tbody>
               </table>
-              </div>
             ) : (
               <p className="text-slate-400 text-sm">
                 Aucun agent absent ou remplacé sur cette journée.

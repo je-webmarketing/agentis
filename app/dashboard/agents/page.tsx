@@ -49,16 +49,11 @@ export default async function AgentsPage({
       service_ref:service_id (
         nom
       ),
-      site:site_id (
-        id,
-        nom,
-        structure_id,
-        structure:structure_id (
-          id,
-          nom,
-          type_structure
-        )
-      )
+     site:site_id (
+  id,
+  nom,
+  structure_id
+)
     `)
     .order("id", { ascending: true })
 
@@ -76,8 +71,8 @@ export default async function AgentsPage({
       : true
 
     const matchSite = selectedSite
-      ? String(agent.site_id || "") === selectedSite
-      : true
+  ? String(agent.site?.id || "") === selectedSite
+  : true
 
     const agentServiceName = agent.service_ref?.nom || agent.service || ""
 
@@ -106,6 +101,7 @@ export default async function AgentsPage({
 
   const actifs = filteredAgents.filter((agent) => agent.statut === "Actif").length
   const inactifs = filteredAgents.filter((agent) => agent.statut !== "Actif").length
+
 
   return (
     <div className="min-h-screen bg-[#020817] text-slate-100 p-8">
@@ -152,7 +148,7 @@ export default async function AgentsPage({
         </div>
       </div>
 
-      <form className="mb-6 grid grid-cols-1 md:grid-cols-5 gap-4 bg-[#0f172a] border border-slate-800 rounded-2xl p-4">
+      <form className="mb-6 grid grid-cols-1 md:grid-cols-4 xl:grid-cols-5 gap-4 bg-[#0f172a] border border-slate-800 rounded-2xl p-4">
         <div>
           <label className="block text-sm text-slate-400 mb-2">
             Structure
