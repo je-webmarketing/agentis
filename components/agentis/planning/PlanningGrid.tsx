@@ -137,32 +137,34 @@ export default function PlanningGrid({
 }: PlanningGridProps) {
   const [planningRows, setPlanningRows] = useState<PlanningRow[]>([])
   const [siteRecords, setSiteRecords] = useState<SiteRecord[]>([])
-  const [planningDate, setPlanningDate] = useState(selectedDate)
+  
   const [loading, setLoading] = useState(true)
   const [moving, setMoving] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
 
   const loadPlanning = useCallback(
-    async (dateOverride?: string) => {
-      let dateToLoad =
-        dateOverride ||
-        selectedDate ||
-        planningDate
+  async (dateOverride?: string) => {
+    const dateToLoad = dateOverride || selectedDate
 
-      if (!dateToLoad) {
-        const latestDate =
-          await PlanningService.getLatestPlanningDate()
+    if (!dateToLoad) {
+      setPlanningRows([])
+      setSiteRecords([])
+      setErrorMessage("")
+      setLoading(false)
+      return
+    }
 
-        dateToLoad = latestDate || getTodayIso()
-      }
+    try {
+      // Remise à zéro immédiate avant de charger la nouvelle journée
+      setLoading(true)
+      setErrorMessage("")
+      setPlanningRows([])
+      setSiteRecords([])
 
-      setPlanningDate(dateToLoad)
-
-      const [planningData, sitesData] =
-        await Promise.all([
-          PlanningService.getDay(dateToLoad),
-          SiteService.list(),
-        ])
+      const [planningData, sitesData] = await Promise.all([
+        PlanningService.getDay(dateToLoad),
+        SiteService.list(),
+      ])
 
       setPlanningRows(
         Array.isArray(planningData)
@@ -179,9 +181,20 @@ export default function PlanningGrid({
             )
           : []
       )
-    },
-    [planningDate, selectedDate]
-  )
+    } catch (error: unknown) {
+      setPlanningRows([])
+      setSiteRecords([])
+
+      setErrorMessage(
+        getErrorMessage(error) ||
+          "Impossible de charger le planning."
+      )
+    } finally {
+      setLoading(false)
+    }
+  },
+  [selectedDate]
+)
 
   useEffect(() => {
     let active = true
@@ -291,7 +304,7 @@ if (agentName) {
     setErrorMessage("")
 
     await PlanningService.deleteAssignment(vacancyId)
-    await loadPlanning(planningDate)
+    await loadPlanning(selectedDate)
   } catch (error: unknown) {
     setErrorMessage(
       getErrorMessage(error) ||
@@ -380,9 +393,7 @@ if (agentName) {
 
     const currentDate =
       sourceAssignment.date ||
-      planningDate ||
-      selectedDate ||
-      getTodayIso()
+      selectedDate || getTodayIso()
 
     const previousRows = planningRows
 
@@ -531,7 +542,7 @@ if (agentName) {
   }
 
   const gridTemplateColumns =
-    `220px repeat(${planningSlots.length}, minmax(185px, 1fr)) 100px`
+  `220px repeat(${planningSlots.length}, minmax(220px, 1fr)) 100px`
 
   if (loading) {
     return (
@@ -540,6 +551,48 @@ if (agentName) {
       </section>
     )
   }
+
+  async function duplicateAssignment(
+  assignmentId: string | number
+) {
+  const source = planningRows.find(
+    (row) => String(row.id) === String(assignmentId)
+  )
+
+  if (!source) {
+    setErrorMessage("Affectation introuvable.")
+    return
+  }
+
+
+if (source.agent_id === null) {
+  setErrorMessage(
+    "Un poste vacant ne peut pas être dupliqué comme une affectation agent."
+  )
+  return
+}
+  try {
+    setErrorMessage("")
+
+    await PlanningService.createAssignment({
+      date: selectedDate,
+      agent_id: source.agent_id,
+      site_id: source.site_id,
+      service: source.service,
+      heure_debut: source.heure_debut,
+      heure_fin: source.heure_fin,
+      statut: source.statut || "Présent",
+      commentaire: source.commentaire || "",
+    })
+
+    await loadPlanning(selectedDate)
+  } catch (error: unknown) {
+    setErrorMessage(
+      getErrorMessage(error) ||
+        "Impossible de dupliquer cette affectation."
+    )
+  }
+}
 
   return (
     <section className="overflow-hidden rounded-3xl border border-slate-800 bg-[#0f172a]">
@@ -551,7 +604,7 @@ if (agentName) {
 
           <p className="mt-1 text-sm text-slate-400">
             Planning du{" "}
-            {planningDate || "jour sélectionné"} —
+            {selectedDate || "jour sélectionné"}—
             déplacements enregistrés dans Supabase.
           </p>
         </div>
@@ -572,7 +625,7 @@ if (agentName) {
       {sites.length === 0 ? (
         <div className="p-8 text-slate-400">
           Aucun site disponible pour le{" "}
-          {planningDate || "jour sélectionné"}.
+          {selectedDate || "jour sélectionné"}.
         </div>
       ) : (
         <div className="overflow-x-auto">
@@ -603,20 +656,21 @@ if (agentName) {
               </div>
             </div>
 
-            {sites.map((site) => (
-              <PlanningSiteRow
-  key={site.id}
-  site={site}
-  slots={planningSlots}
-  gridTemplateColumns={gridTemplateColumns}
-  selectedDate={planningDate}
-  onAssignmentCreated={() =>
-    loadPlanning(planningDate)
-  }
-  onDeleteVacancy={deleteVacancy}
-  onMoveAgent={moveAgent}
-/>
-            ))}
+           {sites.map((site) => (
+  <PlanningSiteRow
+    key={site.id}
+    site={site}
+    slots={planningSlots}
+    gridTemplateColumns={gridTemplateColumns}
+    selectedDate={selectedDate}
+    onAssignmentCreated={() =>
+      loadPlanning(selectedDate)
+    }
+    onDeleteVacancy={deleteVacancy}
+    onDuplicateAssignment={duplicateAssignment}
+    onMoveAgent={moveAgent}
+  />
+))}
           </div>
         </div>
       )}

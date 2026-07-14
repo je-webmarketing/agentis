@@ -50,22 +50,24 @@ export default async function PlanningPage({
 }) {
   const params = await searchParams
 
-  const selectedDate = params?.date || ""
+  const selectedDate =
+  params?.date || new Date().toISOString().slice(0, 10)
   const selectedSite = params?.site || ""
   const searchAgent = params?.agent || ""
 
-  const { data: planning, error } = await supabase
-    .from("planning_journalier")
-    .select(`
-      *,
-      agents:agent_id (
-        nom
-      ),
-      sites:site_id (
-        nom
-      )
-    `)
-    .order("date", { ascending: true })
+ const { data: planning, error } = await supabase
+  .from("planning_journalier")
+  .select(`
+    *,
+    agents:agent_id (
+      nom
+    ),
+    sites:site_id (
+      nom
+    )
+  `)
+  .eq("date", selectedDate)
+  .order("heure_debut", { ascending: true })
 
   if (error) {
     return <div className="p-8 text-red-500">{error.message}</div>
@@ -82,14 +84,18 @@ export default async function PlanningPage({
   ).sort()
 
   const filteredPlanning = rows.filter((item) => {
-    const matchDate = selectedDate ? item.date === selectedDate : true
-    const matchSite = selectedSite ? item.sites?.nom === selectedSite : true
-    const matchAgent = searchAgent
-      ? item.agents?.nom?.toLowerCase().includes(searchAgent.toLowerCase())
-      : true
+  const matchSite = selectedSite
+    ? item.sites?.nom === selectedSite
+    : true
 
-    return matchDate && matchSite && matchAgent
-  })
+  const matchAgent = searchAgent
+    ? item.agents?.nom
+        ?.toLowerCase()
+        .includes(searchAgent.toLowerCase())
+    : true
+
+  return matchSite && matchAgent
+})
 
   const presents = filteredPlanning.filter(
     (item) => item.statut === "Présent"

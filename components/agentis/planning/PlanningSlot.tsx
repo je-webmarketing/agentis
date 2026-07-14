@@ -20,10 +20,17 @@ type Props = {
   time: string
   items: PlanningSlotItem[]
   selectedDate: string
+
   onAssignmentCreated: () => void | Promise<void>
+
   onDeleteVacancy: (
     vacancyId: string | number
   ) => void | Promise<void>
+
+  onDuplicateAssignment: (
+    assignmentId: string | number
+  ) => void | Promise<void>
+
   onMoveAgent: (
     assignmentId: string | number,
     agentName: string,
@@ -44,11 +51,16 @@ export default function PlanningSlot({
   selectedDate,
   onAssignmentCreated,
   onDeleteVacancy,
+  onDuplicateAssignment,
   onMoveAgent,
 }: Props) {
   const [openDialog, setOpenDialog] = useState(false)
-  const [replacementVacancyId, setReplacementVacancyId] =
-    useState<string | number | null>(null)
+
+  const [
+    replacementVacancyId,
+    setReplacementVacancyId,
+  ] = useState<string | number | null>(null)
+
   const [isDragOver, setIsDragOver] = useState(false)
 
   const [start = "", end = ""] = time.split(" - ")
@@ -63,13 +75,26 @@ export default function PlanningSlot({
     }
 
     event.dataTransfer.effectAllowed = "move"
+
     event.dataTransfer.setData(
       "assignmentId",
       String(item.id)
     )
-    event.dataTransfer.setData("agentName", item.name)
-    event.dataTransfer.setData("fromSite", siteName)
-    event.dataTransfer.setData("fromSlot", slotKey)
+
+    event.dataTransfer.setData(
+      "agentName",
+      item.name
+    )
+
+    event.dataTransfer.setData(
+      "fromSite",
+      siteName
+    )
+
+    event.dataTransfer.setData(
+      "fromSlot",
+      slotKey
+    )
   }
 
   function handleDrop(
@@ -80,10 +105,13 @@ export default function PlanningSlot({
 
     const assignmentId =
       event.dataTransfer.getData("assignmentId")
+
     const agentName =
       event.dataTransfer.getData("agentName")
+
     const fromSite =
       event.dataTransfer.getData("fromSite")
+
     const fromSlot =
       event.dataTransfer.getData("fromSlot")
 
@@ -110,6 +138,11 @@ export default function PlanningSlot({
     vacancyId: string | number
   ) {
     setReplacementVacancyId(vacancyId)
+    setOpenDialog(true)
+  }
+
+  function openNewAssignment() {
+    setReplacementVacancyId(null)
     setOpenDialog(true)
   }
 
@@ -153,10 +186,7 @@ export default function PlanningSlot({
           {items.length === 0 ? (
             <button
               type="button"
-              onClick={() => {
-                setReplacementVacancyId(null)
-                setOpenDialog(true)
-              }}
+              onClick={openNewAssignment}
               className="flex min-h-[62px] w-full items-center justify-center rounded-xl border border-dashed border-slate-700/80 bg-[#020817]/30 px-2 text-xs text-slate-600 transition hover:border-yellow-400/50 hover:bg-yellow-400/5 hover:text-yellow-300"
             >
               Déposer ou ajouter
@@ -187,8 +217,13 @@ export default function PlanningSlot({
                   end={end}
                   status={item.status}
                   onReplace={openReplacement}
-                  onDelete={(vacancyId) => {
-                    void onDeleteVacancy(vacancyId)
+                  onDelete={(assignmentId) => {
+                    void onDeleteVacancy(assignmentId)
+                  }}
+                  onDuplicate={(assignmentId) => {
+                    void onDuplicateAssignment(
+                      assignmentId
+                    )
                   }}
                 />
               </div>
@@ -199,10 +234,7 @@ export default function PlanningSlot({
         {items.length > 0 && (
           <button
             type="button"
-            onClick={() => {
-              setReplacementVacancyId(null)
-              setOpenDialog(true)
-            }}
+            onClick={openNewAssignment}
             title={`Ajouter une affectation — ${siteName}, ${label}`}
             aria-label={`Ajouter une affectation sur ${siteName}, créneau ${label}`}
             className="mt-2 flex h-7 w-7 items-center justify-center rounded-lg border border-dashed border-slate-700 bg-[#020817]/50 text-slate-500 transition hover:border-yellow-400/60 hover:bg-yellow-400/10 hover:text-yellow-300"

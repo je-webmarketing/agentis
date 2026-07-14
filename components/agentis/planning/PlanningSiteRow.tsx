@@ -16,10 +16,17 @@ type Props = {
   slots: PlanningSlotConfig[]
   gridTemplateColumns: string
   selectedDate: string
+
   onAssignmentCreated: () => void | Promise<void>
+
   onDeleteVacancy: (
     vacancyId: string | number
   ) => void | Promise<void>
+
+  onDuplicateAssignment: (
+    assignmentId: string | number
+  ) => void | Promise<void>
+
   onMoveAgent: (
     assignmentId: string | number,
     agentName: string,
@@ -37,6 +44,7 @@ export default function PlanningSiteRow({
   selectedDate,
   onAssignmentCreated,
   onDeleteVacancy,
+  onDuplicateAssignment,
   onMoveAgent,
 }: Props) {
   return (
@@ -66,6 +74,9 @@ export default function PlanningSiteRow({
           selectedDate={selectedDate}
           onAssignmentCreated={onAssignmentCreated}
           onDeleteVacancy={onDeleteVacancy}
+          onDuplicateAssignment={
+            onDuplicateAssignment
+          }
           onMoveAgent={onMoveAgent}
         />
       ))}
