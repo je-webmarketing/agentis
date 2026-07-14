@@ -1,6 +1,13 @@
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
 import ExportPlanningPdfButton from "./ExportPlanningPdfButton"
+import PlanningHeader from "@/components/agentis/planning/PlanningHeader"
+import PlanningToolbar from "@/components/agentis/planning/PlanningToolbar"
+import PlanningGrid from "@/components/agentis/planning/PlanningGrid"
+import PlanningSidebar from "@/components/agentis/planning/PlanningSidebar"
+
+export const dynamic = "force-dynamic"
+export const revalidate = 0
 
 function statusClass(status: string) {
   switch (status) {
@@ -32,12 +39,8 @@ type PlanningItem = {
   heure_fin: string | null
   statut: string
   commentaire: string | null
-  agents?: {
-    nom: string | null
-  } | null
-  sites?: {
-    nom: string | null
-  } | null
+  agents?: { nom: string | null } | null
+  sites?: { nom: string | null } | null
 }
 
 export default async function PlanningPage({
@@ -88,13 +91,17 @@ export default async function PlanningPage({
     return matchDate && matchSite && matchAgent
   })
 
-  const presents = filteredPlanning.filter((item) => item.statut === "Présent").length
+  const presents = filteredPlanning.filter(
+    (item) => item.statut === "Présent"
+  ).length
 
   const absents = filteredPlanning.filter(
     (item) => item.statut === "Absent" || item.statut === "Absence"
   ).length
 
-  const remplaces = filteredPlanning.filter((item) => item.statut === "Remplacé").length
+  const remplaces = filteredPlanning.filter(
+    (item) => item.statut === "Remplacé"
+  ).length
 
   const pdfRows = filteredPlanning.map((item) => ({
     agent: item.agents?.nom || "Agent non renseigné",
@@ -105,249 +112,208 @@ export default async function PlanningPage({
     statut: item.statut || "",
   }))
 
-  const planningByAgent = filteredPlanning.reduce<Record<string, PlanningItem[]>>(
-    (acc, item) => {
-      const agentName = item.agents?.nom || "Agent non renseigné"
+  return (
+    <main className="min-h-screen bg-[#020817] text-slate-100 p-8">
+      <div className="mx-auto w-full max-w-[1800px] space-y-6">
+        <Link
+          href="/dashboard"
+          className="inline-flex px-4 py-2 rounded-xl border border-slate-700 bg-[#111827] hover:border-yellow-500/50 hover:text-yellow-300 transition"
+        >
+          ← Retour Dashboard
+        </Link>
 
-      if (!acc[agentName]) {
-        acc[agentName] = []
-      }
+        <PlanningHeader />
 
-      acc[agentName].push(item)
+        <PlanningToolbar />
 
-      return acc
-    },
-    {}
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-[#0f172a] p-4">
+          <div className="text-sm text-slate-400">
+            Export, import et ajout manuel restent disponibles pendant la refonte du planning.
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <ExportPlanningPdfButton
+              rows={pdfRows}
+              selectedDate={selectedDate}
+              total={filteredPlanning.length}
+              presents={presents}
+              absents={absents}
+              remplaces={remplaces}
+            />
+
+            <Link
+              href="/dashboard/planning/import"
+              className="px-4 py-2 rounded-xl bg-blue-600 text-white font-semibold"
+            >
+              Import Planning
+            </Link>
+
+            <Link
+              href="/dashboard/planning/new"
+              className="px-4 py-2 rounded-xl bg-yellow-500 text-slate-950 font-semibold"
+            >
+              + Ajouter une affectation
+            </Link>
+          </div>
+        </div>
+
+        <form
+          className="grid gap-4 bg-[#0f172a] border border-slate-800 rounded-2xl p-4"
+          style={{ gridTemplateColumns: "repeat(4, minmax(0, 1fr))" }}
+        >
+          <div>
+            <label className="block text-sm text-slate-400 mb-2">Date</label>
+            <input
+              type="date"
+              name="date"
+              defaultValue={selectedDate}
+              className="w-full rounded-xl bg-[#020817] border border-slate-700 px-4 py-2 text-slate-100"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm text-slate-400 mb-2">Site</label>
+            <select
+              name="site"
+              defaultValue={selectedSite}
+              className="w-full rounded-xl bg-[#020817] border border-slate-700 px-4 py-2 text-slate-100"
+            >
+              <option value="">Tous les sites</option>
+              {sites.map((site) => (
+                <option key={site} value={site}>
+                  {site}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm text-slate-400 mb-2">Agent</label>
+            <input
+              type="text"
+              name="agent"
+              defaultValue={searchAgent}
+              placeholder="Rechercher un agent"
+              className="w-full rounded-xl bg-[#020817] border border-slate-700 px-4 py-2 text-slate-100"
+            />
+          </div>
+
+          <div className="flex items-end gap-3">
+            <button
+              type="submit"
+              className="px-4 py-2 rounded-xl bg-yellow-500 text-slate-950 font-semibold"
+            >
+              Filtrer
+            </button>
+
+            <Link
+              href="/dashboard/planning"
+              className="px-4 py-2 rounded-xl border border-slate-700 text-slate-300"
+            >
+              Réinitialiser
+            </Link>
+          </div>
+        </form>
+
+        <div
+          className="grid gap-4"
+          style={{ gridTemplateColumns: "repeat(4, minmax(0, 1fr))" }}
+        >
+          <PlanningStat title="Total affectations" value={filteredPlanning.length} />
+          <PlanningStat title="Présents" value={presents} color="emerald" />
+          <PlanningStat title="Absents" value={absents} color="red" />
+          <PlanningStat title="Remplacés" value={remplaces} color="purple" />
+        </div>
+
+        <div
+          className="grid gap-6 items-start"
+          style={{ gridTemplateColumns: "minmax(0, 1fr) 340px" }}
+        >
+         <PlanningGrid selectedDate={selectedDate} />
+
+          <PlanningSidebar selectedDate={selectedDate} />
+        </div>
+
+        <div className="bg-[#0f172a] border border-slate-800 rounded-2xl overflow-hidden">
+          <div className="bg-[#111827] border-b border-slate-800 p-4">
+            <h2 className="text-xl font-bold text-yellow-400">
+              Données importées
+            </h2>
+            <p className="text-sm text-slate-400 mt-1">
+              Vue technique conservée pendant la migration vers le planning opérationnel.
+            </p>
+          </div>
+
+          <div
+            className="grid bg-[#111827] border-b border-slate-800 text-sm font-semibold text-slate-300"
+            style={{ gridTemplateColumns: "repeat(6, minmax(0, 1fr))" }}
+          >
+            <div className="p-4">Agent</div>
+            <div className="p-4">Site</div>
+            <div className="p-4">Date</div>
+            <div className="p-4">Début</div>
+            <div className="p-4">Fin</div>
+            <div className="p-4">Statut</div>
+          </div>
+
+          {filteredPlanning.length === 0 ? (
+            <div className="p-6 text-slate-400">
+              Aucun planning trouvé avec ces filtres.
+            </div>
+          ) : (
+            filteredPlanning.map((item) => (
+              <div
+                key={item.id}
+                className="grid border-b border-slate-800 last:border-b-0 text-sm"
+                style={{ gridTemplateColumns: "repeat(6, minmax(0, 1fr))" }}
+              >
+                <div className="p-4">
+                  {item.agents?.nom || "Agent non renseigné"}
+                </div>
+                <div className="p-4">
+                  {item.sites?.nom || "Site non renseigné"}
+                </div>
+                <div className="p-4">{item.date}</div>
+                <div className="p-4">{item.heure_debut || "-"}</div>
+                <div className="p-4">{item.heure_fin || "-"}</div>
+                <div className="p-4">
+                  <span
+                    className={`px-3 py-2 rounded-xl border text-xs font-medium ${statusClass(
+                      item.statut
+                    )}`}
+                  >
+                    {item.statut}
+                  </span>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </main>
   )
+}
+
+function PlanningStat({
+  title,
+  value,
+  color = "slate",
+}: {
+  title: string
+  value: number
+  color?: "slate" | "emerald" | "red" | "purple"
+}) {
+  const styles = {
+    slate: "bg-slate-800 border-slate-700 text-white",
+    emerald: "bg-emerald-500/10 border-emerald-500/30 text-emerald-300",
+    red: "bg-red-500/10 border-red-500/30 text-red-300",
+    purple: "bg-purple-500/10 border-purple-500/30 text-purple-300",
+  }
 
   return (
-    <div className="min-h-screen bg-[#020817] text-slate-100 p-8">
-      <Link
-        href="/dashboard"
-        className="inline-block mb-4 px-4 py-2 rounded-xl border border-slate-700 bg-[#111827]"
-      >
-        ← Retour Dashboard
-      </Link>
-
-      <div className="mb-8 border-b border-slate-800 pb-6 flex items-center justify-between">
-        <div>
-          <p className="text-sm text-yellow-400 font-semibold mb-1">AGENTIS</p>
-          <h1 className="text-3xl font-bold">Planning journalier</h1>
-          <p className="text-slate-400 mt-1">
-            Affectations importées depuis Excel
-          </p>
-        </div>
-
-        <div className="flex gap-3">
-          <ExportPlanningPdfButton
-            rows={pdfRows}
-            selectedDate={selectedDate}
-            total={filteredPlanning.length}
-            presents={presents}
-            absents={absents}
-            remplaces={remplaces}
-          />
-
-          <Link
-            href="/dashboard/planning/import"
-            className="px-4 py-2 rounded-xl bg-blue-600 text-white font-semibold"
-          >
-            Import Planning
-          </Link>
-
-          <Link
-            href="/dashboard/planning/new"
-            className="px-4 py-2 rounded-xl bg-yellow-500 text-slate-950 font-semibold"
-          >
-            + Ajouter une affectation
-          </Link>
-        </div>
-      </div>
-
-      <form className="mb-6 grid grid-cols-1 md:grid-cols-4 gap-4 bg-[#0f172a] border border-slate-800 rounded-2xl p-4">
-        <div>
-          <label className="block text-sm text-slate-400 mb-2">Date</label>
-          <input
-            type="date"
-            name="date"
-            defaultValue={selectedDate}
-            className="w-full rounded-xl bg-[#020817] border border-slate-700 px-4 py-2 text-slate-100"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm text-slate-400 mb-2">Site</label>
-          <select
-            name="site"
-            defaultValue={selectedSite}
-            className="w-full rounded-xl bg-[#020817] border border-slate-700 px-4 py-2 text-slate-100"
-          >
-            <option value="">Tous les sites</option>
-            {sites.map((site) => (
-              <option key={site} value={site}>
-                {site}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm text-slate-400 mb-2">Agent</label>
-          <input
-            type="text"
-            name="agent"
-            defaultValue={searchAgent}
-            placeholder="Rechercher un agent"
-            className="w-full rounded-xl bg-[#020817] border border-slate-700 px-4 py-2 text-slate-100"
-          />
-        </div>
-
-        <div className="flex items-end gap-3">
-          <button
-            type="submit"
-            className="px-4 py-2 rounded-xl bg-yellow-500 text-slate-950 font-semibold"
-          >
-            Filtrer
-          </button>
-
-          <Link
-            href="/dashboard/planning"
-            className="px-4 py-2 rounded-xl border border-slate-700 text-slate-300"
-          >
-            Réinitialiser
-          </Link>
-        </div>
-      </form>
-
-      <div className="mb-6 grid grid-cols-1 lg:grid-cols-4 gap-4">
-        <div className="rounded-2xl bg-slate-800 border border-slate-700 p-4">
-          <p className="text-slate-400 text-sm">Total affectations</p>
-          <p className="text-3xl font-bold text-white">
-            {filteredPlanning.length}
-          </p>
-        </div>
-
-        <div className="rounded-2xl bg-emerald-500/10 border border-emerald-500/30 p-4">
-          <p className="text-slate-400 text-sm">Présents</p>
-          <p className="text-3xl font-bold text-emerald-300">{presents}</p>
-        </div>
-
-        <div className="rounded-2xl bg-red-500/10 border border-red-500/30 p-4">
-          <p className="text-slate-400 text-sm">Absents</p>
-          <p className="text-3xl font-bold text-red-300">{absents}</p>
-        </div>
-
-        <div className="rounded-2xl bg-purple-500/10 border border-purple-500/30 p-4">
-          <p className="text-slate-400 text-sm">Remplacés</p>
-          <p className="text-3xl font-bold text-purple-300">{remplaces}</p>
-        </div>
-      </div>
-
-      <div className="bg-[#0f172a] border border-slate-800 rounded-2xl overflow-hidden">
-        <div className="grid grid-cols-6 bg-[#111827] border-b border-slate-800">
-          <div className="p-4">Agent</div>
-          <div className="p-4">Site</div>
-          <div className="p-4">Date</div>
-          <div className="p-4">Début</div>
-          <div className="p-4">Fin</div>
-          <div className="p-4">Statut</div>
-        </div>
-
-        {filteredPlanning.length === 0 ? (
-          <div className="p-6 text-slate-400">
-            Aucun planning trouvé avec ces filtres.
-          </div>
-        ) : (
-          filteredPlanning.map((item) => (
-            <div
-              key={item.id}
-              className="grid grid-cols-6 border-b border-slate-800 last:border-b-0"
-            >
-              <div className="p-4">
-                {item.agents?.nom || "Agent non renseigné"}
-              </div>
-              <div className="p-4">
-                {item.sites?.nom || "Site non renseigné"}
-              </div>
-              <div className="p-4">{item.date}</div>
-              <div className="p-4">{item.heure_debut || "-"}</div>
-              <div className="p-4">{item.heure_fin || "-"}</div>
-              <div className="p-4">
-                <span
-                  className={`px-3 py-2 rounded-xl border text-xs font-medium ${statusClass(
-                    item.statut
-                  )}`}
-                >
-                  {item.statut}
-                </span>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-
-      <div className="mt-8 bg-[#0f172a] border border-slate-800 rounded-2xl overflow-hidden">
-        <div className="bg-[#111827] border-b border-slate-800 p-4">
-          <h2 className="text-xl font-bold text-yellow-400">
-            Vue hebdomadaire par agent
-          </h2>
-          <p className="text-sm text-slate-400 mt-1">
-            Synthèse visuelle des affectations importées
-          </p>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-[#020817]">
-              <tr className="border-b border-slate-800">
-                <th className="text-left p-4">Agent</th>
-                <th className="text-left p-4">Affectations</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {Object.entries(planningByAgent).map(([agentName, items]) => (
-                <tr
-                  key={agentName}
-                  className="border-b border-slate-800 last:border-b-0"
-                >
-                  <td className="p-4 font-semibold text-slate-100 whitespace-nowrap">
-                    {agentName}
-                  </td>
-
-                  <td className="p-4">
-                    <div className="flex flex-wrap gap-2">
-                      {items.map((item) => (
-                        <div
-                          key={item.id}
-                          className={`min-w-[140px] rounded-xl border px-3 py-2 text-xs ${statusClass(
-                            item.statut
-                          )}`}
-                        >
-                          <p className="font-semibold">{item.date}</p>
-                          <p>{item.sites?.nom || "Site non renseigné"}</p>
-                          <p>
-                            {item.heure_debut || "-"} / {item.heure_fin || "-"}
-                          </p>
-                          <p className="font-bold mt-1">{item.statut}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-
-              {filteredPlanning.length === 0 && (
-                <tr>
-                  <td colSpan={2} className="p-6 text-slate-400">
-                    Aucune donnée à afficher dans la vue hebdomadaire.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+    <div className={`rounded-2xl border p-4 ${styles[color]}`}>
+      <p className="text-slate-400 text-sm">{title}</p>
+      <p className="text-3xl font-bold">{value}</p>
     </div>
   )
 }

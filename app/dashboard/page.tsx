@@ -1,16 +1,17 @@
 import {
-  Users,
+  Activity,
+  BarChart3,
+  Building2,
+  CalendarDays,
   CalendarOff,
   ClockAlert,
-  FileCheck2,
-  CalendarDays,
-  UserRound,
   Folder,
-  BarChart3,
   LayoutDashboard,
-  ShieldCheck,
-  Building2,
   MapPin,
+  UserRound,
+  Users,
+  ShieldCheck, 
+  FileCheck2
 } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import Link from "next/link"
@@ -27,6 +28,7 @@ export default async function DashboardPage() {
 
   const menu = [
   { label: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
+  { label: "Cockpit RH", icon: Activity, href: "/dashboard/cockpit" },
   { label: "Planning", icon: CalendarDays, href: "/dashboard/planning" },
   { label: "Congés", icon: CalendarOff, href: "/dashboard/absences" },
   { label: "Agents", icon: UserRound, href: "/dashboard/agents" },
