@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import {
   Maximize2,
@@ -154,7 +154,7 @@ function getErrorMessage(error: unknown) {
   return "Une erreur inconnue est survenue."
 }
 
-export default function PlanningSupervisionPage() {
+function PlanningSupervisionContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -721,6 +721,23 @@ export default function PlanningSupervisionPage() {
         )}
       </div>
     </main>
+  )
+}
+
+
+export default function PlanningSupervisionPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen bg-slate-100 px-4 py-6 text-slate-900 sm:px-6 xl:px-8">
+          <section className="rounded-3xl border border-slate-200 bg-white p-10 text-center text-slate-600 shadow-sm">
+            Chargement de la supervision…
+          </section>
+        </main>
+      }
+    >
+      <PlanningSupervisionContent />
+    </Suspense>
   )
 }
 
