@@ -5,60 +5,66 @@ const actions = [
     title: "Nouvel agent",
     href: "/dashboard/agents/new",
     icon: "👤",
-    color: "border-blue-500/30 hover:border-blue-400",
+    color: {
+      border: "border-blue-200 hover:border-blue-300",
+      icon: "bg-blue-50 text-blue-700",
+    },
   },
   {
     title: "Nouveau contrat",
     href: "/dashboard/contrats/new",
     icon: "📄",
-    color: "border-yellow-500/30 hover:border-yellow-400",
+    color: {
+      border: "border-yellow-200 hover:border-yellow-300",
+      icon: "bg-yellow-50 text-yellow-700",
+    },
   },
   {
     title: "Nouvelle absence",
     href: "/dashboard/absences/new",
     icon: "🏖️",
-    color: "border-red-500/30 hover:border-red-400",
+    color: {
+      border: "border-red-200 hover:border-red-300",
+      icon: "bg-red-50 text-red-700",
+    },
   },
   {
     title: "Nouvelle formation",
     href: "/dashboard/formations/new",
     icon: "🎓",
-    color: "border-emerald-500/30 hover:border-emerald-400",
+    color: {
+      border: "border-emerald-200 hover:border-emerald-300",
+      icon: "bg-emerald-50 text-emerald-700",
+    },
   },
 ]
 
 export default function QuickActions() {
   return (
     <div className="grid grid-cols-2 gap-4">
-
       {actions.map((action) => (
-
         <Link
           key={action.title}
           href={action.href}
-          className={`flex items-center gap-4 rounded-2xl border bg-[#0f172a] p-5 transition hover:scale-[1.02] ${action.color}`}
+          className={`group flex items-center gap-4 rounded-2xl border bg-white p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-md ${action.color.border}`}
         >
-
-          <div className="text-3xl">
+          <div
+            className={`flex h-14 w-14 items-center justify-center rounded-2xl text-3xl transition-transform duration-300 group-hover:scale-110 ${action.color.icon}`}
+          >
             {action.icon}
           </div>
 
-          <div>
-
-            <div className="font-semibold text-white">
+          <div className="min-w-0">
+            <div className="font-semibold text-slate-900">
               {action.title}
             </div>
 
-            <div className="text-xs text-slate-400">
+            <div className="mt-1 text-xs font-medium uppercase tracking-[0.15em] text-slate-500">
               Ouvrir
             </div>
-
           </div>
-
         </Link>
-
       ))}
-
     </div>
   )
 }

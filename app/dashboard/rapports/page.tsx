@@ -1,121 +1,313 @@
 import Link from "next/link"
+import {
+  CalendarDays,
+  Clock3,
+  FileClock,
+  FileText,
+  ShieldCheck,
+  UserRoundCheck,
+  UsersRound,
+  type LucideIcon,
+} from "lucide-react"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
 
-const reports = [
+type ReportStatus = "Disponible" | "Disponible bientôt"
+
+type ReportItem = {
+  title: string
+  description: string
+  href: string
+  status: ReportStatus
+  icon: LucideIcon
+  accentClass: string
+  iconClass: string
+}
+
+const reports: ReportItem[] = [
   {
     title: "Planning journalier",
     description:
-      "Générer le planning complet d’une journée avec les sites, créneaux et agents.",
+      "Générer le planning complet d’une journée avec les sites, les créneaux, les horaires et les agents affectés.",
     href: "/dashboard/rapports/planning",
     status: "Disponible",
+    icon: CalendarDays,
+    accentClass:
+      "border-emerald-200 bg-emerald-50 text-emerald-700",
+    iconClass:
+      "bg-emerald-50 text-emerald-600",
   },
   {
     title: "Présences et absences",
     description:
-      "Afficher les agents présents, absents et les situations à traiter.",
+      "Afficher les agents présents, absents et les situations nécessitant une action RH.",
     href: "/dashboard/rapports/presences",
     status: "Disponible bientôt",
+    icon: UserRoundCheck,
+    accentClass:
+      "border-blue-200 bg-blue-50 text-blue-700",
+    iconClass:
+      "bg-blue-50 text-blue-600",
   },
   {
     title: "Remplacements",
     description:
-      "Suivre les remplacements enregistrés sur une période donnée.",
+      "Suivre les remplacements enregistrés sur une période et identifier les postes restés vacants.",
     href: "/dashboard/rapports/remplacements",
     status: "Disponible bientôt",
+    icon: ShieldCheck,
+    accentClass:
+      "border-violet-200 bg-violet-50 text-violet-700",
+    iconClass:
+      "bg-violet-50 text-violet-600",
   },
   {
     title: "Liste des agents",
     description:
-      "Exporter la liste des agents avec leur service, poste, site et statut.",
+      "Exporter la liste des agents avec leur service, leur poste, leur site principal et leur statut.",
     href: "/dashboard/rapports/agents",
     status: "Disponible bientôt",
+    icon: UsersRound,
+    accentClass:
+      "border-cyan-200 bg-cyan-50 text-cyan-700",
+    iconClass:
+      "bg-cyan-50 text-cyan-600",
   },
   {
     title: "Documents RH",
     description:
-      "Lister les documents, échéances et pièces arrivant à expiration.",
+      "Lister les documents enregistrés, les échéances proches et les pièces arrivées à expiration.",
     href: "/dashboard/rapports/documents",
     status: "Disponible bientôt",
+    icon: FileText,
+    accentClass:
+      "border-amber-200 bg-amber-50 text-amber-700",
+    iconClass:
+      "bg-amber-50 text-amber-600",
   },
   {
     title: "Temps & 1607 h",
     description:
-      "Générer un état annuel ou individuel des compteurs de temps.",
+      "Générer un état annuel ou individuel des compteurs, des heures réalisées et des écarts.",
     href: "/dashboard/rapports/temps",
     status: "Disponible bientôt",
+    icon: Clock3,
+    accentClass:
+      "border-rose-200 bg-rose-50 text-rose-700",
+    iconClass:
+      "bg-rose-50 text-rose-600",
   },
 ]
 
 export default function RapportsPage() {
+  const availableReports = reports.filter(
+    (report) => report.status === "Disponible"
+  ).length
+
+  const upcomingReports =
+    reports.length - availableReports
+
   return (
-    <main className="min-h-screen bg-[#020817] p-8 text-slate-100">
+    <main className="min-h-screen bg-slate-50 px-6 py-8 text-slate-900 lg:px-8">
       <div className="mx-auto w-full max-w-[1800px] space-y-6">
-        <Link
-          href="/dashboard"
-          className="inline-flex rounded-xl border border-slate-700 bg-[#111827] px-4 py-2 text-sm text-slate-300 transition hover:border-yellow-500/50 hover:text-yellow-300"
-        >
-          ← Retour au Dashboard
-        </Link>
+        <header className="flex flex-col gap-5 border-b border-slate-200 pb-7 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.22em] text-amber-600">
+              Pilotage RH
+            </p>
 
-        <section className="rounded-3xl border border-yellow-500/20 bg-gradient-to-br from-[#111827] via-[#07111f] to-[#020817] p-8 shadow-2xl shadow-black/30">
-          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-yellow-400">
-            AGENTIS
-          </p>
+            <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">
+              Rapports RH
+            </h1>
 
-          <h1 className="mt-3 text-3xl font-bold text-white">
-            Rapports
-          </h1>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+              Générez les états nécessaires au suivi
+              opérationnel, au pilotage des ressources humaines
+              et aux exports administratifs.
+            </p>
+          </div>
 
-          <p className="mt-3 max-w-3xl text-slate-400">
-            Générez les états utiles au pilotage RH, au suivi opérationnel
-            et aux exports administratifs.
-          </p>
+          <Link
+            href="/dashboard"
+            className="inline-flex w-fit items-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700"
+          >
+            ← Retour au Dashboard
+          </Link>
+        </header>
+
+        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <SummaryCard
+            title="Rapports disponibles"
+            value={availableReports}
+            subtitle="Prêts à être générés"
+            icon={FileText}
+            tone="green"
+          />
+
+          <SummaryCard
+            title="Rapports à venir"
+            value={upcomingReports}
+            subtitle="Fonctionnalités prévues"
+            icon={FileClock}
+            tone="amber"
+          />
+
+          <SummaryCard
+            title="Catalogue"
+            value={reports.length}
+            subtitle="Rapports RH référencés"
+            icon={ShieldCheck}
+            tone="blue"
+          />
         </section>
 
-        <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-          {reports.map((report) => (
-            <Link
-              key={report.href}
-              href={report.href}
-              className="group block rounded-3xl border border-slate-800 bg-[#0f172a] p-6 transition hover:-translate-y-1 hover:border-yellow-500/40 hover:bg-[#111827]"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h2 className="text-xl font-semibold text-white transition group-hover:text-yellow-300">
-                    {report.title}
-                  </h2>
+        <section>
+          <div className="mb-4">
+            <h2 className="text-xl font-bold text-slate-900">
+              Catalogue des rapports
+            </h2>
 
-                  <p className="mt-3 text-sm leading-6 text-slate-400">
-                    {report.description}
-                  </p>
-                </div>
+            <p className="mt-1 text-sm text-slate-500">
+              Sélectionnez un rapport disponible pour accéder
+              à ses paramètres et à sa génération.
+            </p>
+          </div>
 
-                <span className="shrink-0 rounded-full border border-yellow-500/20 bg-yellow-500/10 px-3 py-1 text-xs text-yellow-300">
-                  Rapport
-                </span>
-              </div>
-
-              <div className="mt-6 flex items-center justify-between border-t border-slate-800 pt-4">
-                <span
-                  className={`text-xs ${
-                    report.status === "Disponible"
-                      ? "text-emerald-300"
-                      : "text-slate-500"
-                  }`}
-                >
-                  {report.status}
-                </span>
-
-                <span className="rounded-xl border border-yellow-500/30 px-4 py-2 text-sm font-semibold text-yellow-300 transition group-hover:bg-yellow-500/10">
-                  Ouvrir →
-                </span>
-              </div>
-            </Link>
-          ))}
+          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+            {reports.map((report) => (
+              <ReportCard
+                key={report.href}
+                report={report}
+              />
+            ))}
+          </div>
         </section>
       </div>
     </main>
+  )
+}
+
+function ReportCard({
+  report,
+}: {
+  report: ReportItem
+}) {
+  const Icon = report.icon
+  const isAvailable =
+    report.status === "Disponible"
+
+  const card = (
+    <article
+      className={`flex h-full flex-col rounded-2xl border bg-white p-6 shadow-sm transition duration-200 ${
+        isAvailable
+          ? "border-slate-200 hover:-translate-y-0.5 hover:border-amber-300 hover:shadow-md"
+          : "border-slate-200 opacity-75"
+      }`}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div
+          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${report.iconClass}`}
+        >
+          <Icon className="h-5 w-5" />
+        </div>
+
+        <span
+          className={`rounded-full border px-3 py-1 text-xs font-semibold ${report.accentClass}`}
+        >
+          {report.status}
+        </span>
+      </div>
+
+      <div className="mt-5 flex-1">
+        <h3
+          className={`text-lg font-bold ${
+            isAvailable
+              ? "text-slate-900"
+              : "text-slate-700"
+          }`}
+        >
+          {report.title}
+        </h3>
+
+        <p className="mt-3 text-sm leading-6 text-slate-500">
+          {report.description}
+        </p>
+      </div>
+
+      <div className="mt-6 border-t border-slate-100 pt-4">
+        {isAvailable ? (
+          <span className="inline-flex items-center text-sm font-semibold text-amber-700">
+            Ouvrir le rapport →
+          </span>
+        ) : (
+          <span className="text-sm font-medium text-slate-400">
+            En cours de développement
+          </span>
+        )}
+      </div>
+    </article>
+  )
+
+  if (!isAvailable) {
+    return card
+  }
+
+  return (
+    <Link
+      href={report.href}
+      className="block h-full rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+    >
+      {card}
+    </Link>
+  )
+}
+
+function SummaryCard({
+  title,
+  value,
+  subtitle,
+  icon: Icon,
+  tone,
+}: {
+  title: string
+  value: number
+  subtitle: string
+  icon: LucideIcon
+  tone: "green" | "amber" | "blue"
+}) {
+  const iconClasses = {
+    green:
+      "bg-emerald-50 text-emerald-600",
+    amber:
+      "bg-amber-50 text-amber-600",
+    blue:
+      "bg-blue-50 text-blue-600",
+  }
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-sm font-medium text-slate-500">
+            {title}
+          </p>
+
+          <p className="mt-2 text-3xl font-bold text-slate-900">
+            {value}
+          </p>
+
+          <p className="mt-1 text-xs text-slate-500">
+            {subtitle}
+          </p>
+        </div>
+
+        <div
+          className={`flex h-11 w-11 items-center justify-center rounded-xl ${iconClasses[tone]}`}
+        >
+          <Icon className="h-5 w-5" />
+        </div>
+      </div>
+    </div>
   )
 }

@@ -1,98 +1,130 @@
+import Link from "next/link"
+import { cookies } from "next/headers"
 import {
-  Activity,
-  BarChart3,
+  AlertTriangle,
   Building2,
   CalendarDays,
   CalendarOff,
   ClockAlert,
-  Folder,
-  LayoutDashboard,
-  MapPin,
-  UserRound,
+  FileCheck2,
+  ShieldCheck,
+  UserCheck,
   Users,
-  ShieldCheck, 
-  FileCheck2
+  type LucideIcon,
 } from "lucide-react"
-import { supabase } from "@/lib/supabase"
-import Link from "next/link"
-import Image from "next/image"
 
+import AgentEngine from "@/lib/services/AgentEngine"
+import { supabase } from "@/lib/supabase"
+
+type KpiItem = {
+  label: string
+  value: string
+  color: string
+  icon: LucideIcon
+  href?: string
+}
 
 export default async function DashboardPage() {
   const today = new Date()
-  const in14Days = new Date()
-  in14Days.setDate(today.getDate() + 14)
 
-  const todayIso = today.toISOString().split("T")[0]
-  const limitIso = in14Days.toISOString().split("T")[0]
+  const engineStats =
+    await AgentEngine.getDashboardStats()
 
-  const menu = [
-  { label: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
-  { label: "Cockpit RH", icon: Activity, href: "/dashboard/cockpit" },
-  { label: "Planning", icon: CalendarDays, href: "/dashboard/planning" },
-  { label: "Congés", icon: CalendarOff, href: "/dashboard/absences" },
-  { label: "Agents", icon: UserRound, href: "/dashboard/agents" },
+  const in14Days = new Date(today)
+  in14Days.setDate(in14Days.getDate() + 14)
 
-  { label: "Structures", icon: Building2, href: "/dashboard/structures" },
-  { label: "Sites", icon: MapPin, href: "/dashboard/sites" },
+  const todayIso = today.toISOString().slice(0, 10)
+  const limitIso = in14Days.toISOString().slice(0, 10)
 
-  { label: "Temps & 1607h", icon: ClockAlert, href: "/dashboard/temps" },
-  { label: "Documents", icon: Folder, href: "/dashboard/documents" },
-  { label: "Rapports", icon: BarChart3, href: "/dashboard/rapports" },
-]
+  /*
+   * Date active partagée avec le planning.
+   * Elle est enregistrée dans un cookie par PlanningToolbar.
+   */
+  const cookieStore = await cookies()
+  const storedDate =
+    cookieStore.get("agentis_active_date")?.value
 
-  const { data: latestPlanning } = await supabase
-    .from("planning_journalier")
-    .select("date")
-    .order("date", { ascending: false })
-    .limit(1)
-    .single()
+  const dashboardDate =
+    isValidIsoDate(storedDate)
+      ? String(storedDate)
+      : todayIso
 
-  const dashboardDate = latestPlanning?.date || todayIso
-
-  const { count: effectifTotalCount } = await supabase
-    .from("agents")
-    .select("*", { count: "exact", head: true })
-    .eq("statut", "Actif")
-
+  /*
+   * Indicateurs principaux.
+   */
   const { count: presentsCount } = await supabase
     .from("planning_journalier")
-    .select("*", { count: "exact", head: true })
+    .select("*", {
+      count: "exact",
+      head: true,
+    })
     .eq("date", dashboardDate)
     .eq("statut", "Présent")
 
   const { count: absentsCount } = await supabase
     .from("planning_journalier")
-    .select("*", { count: "exact", head: true })
+    .select("*", {
+      count: "exact",
+      head: true,
+    })
     .eq("date", dashboardDate)
     .in("statut", ["Absent", "Absence"])
 
   const { count: remplacesCount } = await supabase
     .from("planning_journalier")
-    .select("*", { count: "exact", head: true })
+    .select("*", {
+      count: "exact",
+      head: true,
+    })
     .eq("date", dashboardDate)
     .eq("statut", "Remplacé")
 
-  const { count: congesAVenirCount } = await supabase
-    .from("absences")
-    .select("*", { count: "exact", head: true })
-    .gte("date_debut", todayIso)
-    .lte("date_debut", limitIso)
+  const { count: congesAVenirCount } =
+    await supabase
+      .from("absences")
+      .select("*", {
+        count: "exact",
+        head: true,
+      })
+      .gte("date_debut", todayIso)
+      .lte("date_debut", limitIso)
 
-  const { count: congesValidesCount } = await supabase
-    .from("absences")
-    .select("*", { count: "exact", head: true })
-    .eq("statut_validation", "Validée")
+  const { count: congesValidesCount } =
+    await supabase
+      .from("absences")
+      .select("*", {
+        count: "exact",
+        head: true,
+      })
+      .eq("statut_validation", "Validée")
 
-  const { count: demandesEnAttenteCount } = await supabase
-    .from("absences")
-    .select("*", { count: "exact", head: true })
-    .neq("statut_validation", "Validée")
+  const { count: demandesEnAttenteCount } =
+    await supabase
+      .from("absences")
+      .select("*", {
+        count: "exact",
+        head: true,
+      })
+      .neq("statut_validation", "Validée")
 
+  const { count: structuresCount } =
+    await supabase
+      .from("structures")
+      .select("*", {
+        count: "exact",
+        head: true,
+      })
+
+  /*
+   * Absents et remplacements de la journée affichée.
+   */
   const { data: absentsJour } = await supabase
     .from("planning_journalier")
     .select(`
-      *,
+      id,
+      statut,
+      heure_debut,
+      heure_fin,
       agents:agent_id (
         nom
       ),
@@ -101,340 +133,558 @@ export default async function DashboardPage() {
       )
     `)
     .eq("date", dashboardDate)
-    .in("statut", ["Absent", "Absence", "Remplacé"])
-    .order("statut", { ascending: true })
+    .in("statut", [
+      "Absent",
+      "Absence",
+      "Remplacé",
+    ])
+    .order("statut", {
+      ascending: true,
+    })
 
-  const { data: alertesAbsences } = await supabase
-    .from("absences")
-    .select(`
-      *,
-      agents:agent_id (
-        nom
-      )
-    `)
-    .gte("date_debut", todayIso)
-    .lte("date_debut", limitIso)
-    .order("date_debut", { ascending: true })
+  /*
+   * Congés prévus dans les 14 prochains jours.
+   */
+  const { data: alertesAbsences } =
+    await supabase
+      .from("absences")
+      .select(`
+        id,
+        type,
+        date_debut,
+        date_fin,
+        statut_validation,
+        agents:agent_id (
+          nom
+        )
+      `)
+      .gte("date_debut", todayIso)
+      .lte("date_debut", limitIso)
+      .order("date_debut", {
+        ascending: true,
+      })
 
-  const effectifTotal = effectifTotalCount || 0
   const presents = presentsCount || 0
   const absents = absentsCount || 0
   const remplaces = remplacesCount || 0
 
-  const totalAgentsJour = presents + absents + remplaces
+  const totalAgentsJour =
+    presents + absents + remplaces
 
   const tauxPresence =
-    totalAgentsJour > 0 ? Math.round((presents / totalAgentsJour) * 100) : 0
+    totalAgentsJour > 0
+      ? Math.round(
+          (presents / totalAgentsJour) * 100
+        )
+      : 0
 
   const couvertureOperationnelle =
     totalAgentsJour > 0
-      ? Math.round(((presents + remplaces) / totalAgentsJour) * 100)
+      ? Math.round(
+          ((presents + remplaces) /
+            totalAgentsJour) *
+            100
+        )
       : 0
 
-  const { count: structuresCount } = await supabase
-  .from("structures")
-  .select("*", { count: "exact", head: true })    
-
-  const kpis = [
+  const kpis: KpiItem[] = [
+    {
+      label: "Agents actifs",
+      value: String(engineStats.activeAgents),
+      color: "text-emerald-600",
+      icon: UserCheck,
+      href: "/dashboard/agents",
+    },
+    {
+      label: "Conformité RH",
+      value: `${engineStats.complianceRate}%`,
+      color:
+        engineStats.complianceRate >= 80
+          ? "text-emerald-600"
+          : engineStats.complianceRate >= 50
+            ? "text-amber-600"
+            : "text-red-600",
+      icon: ShieldCheck,
+      href: "/dashboard/alertes",
+    },
+    {
+      label: "Alertes critiques",
+      value: String(engineStats.criticalAlerts),
+      color:
+        engineStats.criticalAlerts > 0
+          ? "text-red-600"
+          : "text-emerald-600",
+      icon: AlertTriangle,
+      href: "/dashboard/alertes",
+    },
+    {
+      label: "Dossiers incomplets",
+      value: String(engineStats.incompleteAgents),
+      color:
+        engineStats.incompleteAgents > 0
+          ? "text-amber-600"
+          : "text-emerald-600",
+      icon: FileCheck2,
+      href: "/dashboard/alertes",
+    },
     {
       label: "Effectif du jour",
       value: String(totalAgentsJour),
-      color: "text-cyan-400",
+      color: "text-cyan-600",
       icon: Users,
     },
     {
       label: "Agents présents",
       value: String(presents),
-      color: "text-emerald-400",
+      color: "text-emerald-600",
       icon: Users,
     },
     {
       label: "Absences du jour",
       value: String(absents),
-      color: "text-amber-400",
+      color: "text-amber-600",
       icon: CalendarOff,
     },
     {
       label: "Remplacements",
       value: String(remplaces),
-      color: "text-red-400",
+      color: "text-red-500",
       icon: ClockAlert,
     },
     {
       label: "Couverture opérationnelle",
       value: `${couvertureOperationnelle}%`,
-      color: "text-green-400",
+      color: "text-emerald-600",
       icon: ShieldCheck,
     },
     {
-      label: "Taux présence",
+      label: "Taux de présence",
       value: `${tauxPresence}%`,
-      color: "text-green-400",
+      color: "text-emerald-600",
       icon: Users,
     },
     {
-      label: "Congés validés",
-      value: String(congesValidesCount || 0),
-      color: "text-cyan-400",
-      icon: CalendarDays,
-    },
-    {
       label: "Congés à venir",
-      value: String(congesAVenirCount || 0),
-      color: "text-violet-400",
+      value: String(
+        congesAVenirCount || 0
+      ),
+      color: "text-violet-600",
       icon: CalendarDays,
     },
     {
       label: "Demandes en attente",
-      value: String(demandesEnAttenteCount || 0),
-      color: "text-blue-400",
+      value: String(
+        demandesEnAttenteCount || 0
+      ),
+      color: "text-blue-600",
       icon: FileCheck2,
     },
-   {
-  label: "Structures",
-  value: String(structuresCount || 0),
-  color: "text-yellow-400",
-  icon: Building2,
-  href: "/dashboard/structures",
-},
+    {
+      label: "Congés validés",
+      value: String(
+        congesValidesCount || 0
+      ),
+      color: "text-cyan-600",
+      icon: CalendarDays,
+    },
+    {
+      label: "Structures",
+      value: String(structuresCount || 0),
+      color: "text-amber-600",
+      icon: Building2,
+      href: "/dashboard/structures",
+    },
   ]
 
+  const hasOperationalAlerts =
+    absents > 0 ||
+    remplaces > 0 ||
+    engineStats.criticalAlerts > 0
+
   return (
-    <div className="min-h-screen bg-[#020817] text-slate-100 flex">
-      <aside className="w-72 bg-[#050505] border-r border-yellow-500/20 p-6 flex flex-col">
-        <div className="mb-10">
-          <Image
-            src="/logo-agentis-new.png"
-            alt="AGENTIS"
-            width={220}
-            height={90}
-            className="w-full h-auto object-contain rounded-xl"
-            priority
-          />
-        </div>
-
-        <nav className="space-y-2 flex-1">
-          {menu.map((item) => {
-            const Icon = item.icon
-
-            return (
-              <Link
-                key={item.label}
-                href={item.href}
-                className="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium border text-slate-400 border-transparent hover:bg-[#111827] hover:text-yellow-400 hover:border-yellow-500/20"
-              >
-                <Icon size={18} />
-                {item.label}
-              </Link>
-            )
-          })}
-        </nav>
-
-       <div className="mt-auto pt-6 border-t border-yellow-500/20 text-center">
-
-  <p className="font-semibold text-yellow-400 text-sm">
-    AGENTIS v1.0
-  </p>
-
-  <p className="mt-3 text-xs text-slate-500">
-    Développé avec ❤️ par
-  </p>
-
-  <div className="mt-3 flex justify-center items-center gap-3 flex-wrap">
-
-    <a
-      href="https://ericjarry34.systeme.io/je-webmarketing"
-      target="_blank"
-      rel="noopener noreferrer"
-      className="font-semibold text-yellow-400 hover:text-yellow-300 transition-colors"
-    >
-      JE-Webmarketing
-    </a>
-
-    <span className="text-slate-600">|</span>
-
-    <a
-      href="https://www.optimavis-e-reputation.com"
-      target="_blank"
-      rel="noopener noreferrer"
-      className="font-semibold text-cyan-400 hover:text-cyan-300 transition-colors"
-    >
-      Optim'Avis Client
-    </a>
-
-  </div>
-
-  <p className="mt-3 text-[11px] text-slate-500">
-    Développement logiciel • Marketing Digital • E-Réputation
-  </p>
-
-  <p className="mt-2 text-[11px] text-slate-600">
-    © 2026 AGENTIS — Tous droits réservés
-  </p>
-
-</div>
-      </aside>
-
-      <main className="flex-1 p-8 overflow-x-hidden">
-        <div className="flex justify-between items-center mb-8 border-b border-slate-800 pb-6">
+    <main className="min-h-screen bg-slate-50 px-6 py-8 text-slate-900 lg:px-8">
+      <div className="mx-auto w-full max-w-[1800px]">
+        {/* En-tête */}
+        <header className="flex flex-col gap-5 border-b border-slate-200 pb-7 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-sm text-yellow-400 font-semibold mb-1">
+            <p className="text-xs font-bold uppercase tracking-[0.22em] text-amber-600">
               AGENTIS
             </p>
 
-            <h2 className="text-3xl font-bold text-white">Dashboard RH</h2>
+            <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">
+              Dashboard RH
+            </h1>
 
-            <p className="text-sm text-yellow-400 mt-2">
+            <p className="mt-2 text-sm font-medium text-amber-600">
               Données du planning du{" "}
-              {new Date(dashboardDate).toLocaleDateString("fr-FR")}
+              {formatDate(dashboardDate)}
             </p>
 
-            <p className="text-slate-400 mt-1">
-              Gestion intelligente des agents et des plannings
+            <p className="mt-1 text-sm text-slate-600">
+              Gestion intelligente des agents et
+              des plannings
             </p>
           </div>
 
-          <div className="bg-[#111827] border border-yellow-500/30 px-4 py-2 rounded-2xl text-sm text-yellow-300">
+          <div className="w-fit rounded-full border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-700">
             Administrateur
           </div>
+        </header>
+
+        {/* État général */}
+        <section
+          className={`mt-7 flex items-center gap-3 rounded-2xl border px-5 py-4 ${
+            hasOperationalAlerts
+              ? "border-amber-200 bg-amber-50 text-amber-800"
+              : "border-emerald-200 bg-emerald-50 text-emerald-800"
+          }`}
+        >
+          <ShieldCheck className="h-5 w-5 shrink-0" />
+
+          <div>
+            <p className="font-semibold">
+              {hasOperationalAlerts
+                ? "Situation opérationnelle à surveiller"
+                : "Situation opérationnelle normale"}
+            </p>
+
+            <p className="mt-0.5 text-sm opacity-80">
+              {hasOperationalAlerts
+                ? `${absents} absence(s), ${remplaces} remplacement(s) et ${engineStats.criticalAlerts} alerte(s) RH critique(s).`
+                : "Aucune absence, aucun remplacement et aucune alerte RH critique détectés."}
+            </p>
+          </div>
+        </section>
+
+        {/* KPI */}
+        <section className="mt-7 grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+          {kpis.map((item) => (
+            <KpiCard
+              key={item.label}
+              item={item}
+            />
+          ))}
+        </section>
+
+        {/* Situation opérationnelle */}
+        <section className="mt-8 overflow-hidden rounded-3xl border border-amber-200 bg-white shadow-sm">
+          <div className="border-b border-amber-100 bg-amber-50/70 px-6 py-5">
+            <h2 className="text-xl font-bold text-amber-800">
+              Situation opérationnelle du jour
+            </h2>
+
+            <p className="mt-1 text-sm text-amber-700/75">
+              Absences, remplacements et congés à
+              surveiller.
+            </p>
+          </div>
+
+          <div className="grid gap-6 p-6 xl:grid-cols-2">
+            {/* Absences et remplacements */}
+            <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+              <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+                <div>
+                  <h3 className="font-bold text-slate-900">
+                    Absents et remplacements
+                  </h3>
+
+                  <p className="mt-1 text-xs text-slate-500">
+                    Journée du{" "}
+                    {formatDate(dashboardDate)}
+                  </p>
+                </div>
+
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                  {absentsJour?.length || 0}
+                </span>
+              </div>
+
+              {absentsJour?.length ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[620px] text-sm">
+                    <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                      <tr>
+                        <th className="px-5 py-3 text-left font-semibold">
+                          Agent
+                        </th>
+
+                        <th className="px-5 py-3 text-left font-semibold">
+                          Site
+                        </th>
+
+                        <th className="px-5 py-3 text-left font-semibold">
+                          Horaire
+                        </th>
+
+                        <th className="px-5 py-3 text-left font-semibold">
+                          Statut
+                        </th>
+                      </tr>
+                    </thead>
+
+                    <tbody className="divide-y divide-slate-100">
+                      {absentsJour.map(
+                        (item) => (
+                          <tr
+                            key={item.id}
+                            className="transition hover:bg-slate-50"
+                          >
+                            <td className="px-5 py-4 font-semibold text-slate-900">
+                              {getRelationName(
+  item.agents,
+  "Agent non renseigné"
+)}
+                            </td>
+
+                            <td className="px-5 py-4 text-slate-600">
+                            {getRelationName(
+  item.sites,
+  "Site non renseigné"
+)}
+                            </td>
+
+                            <td className="px-5 py-4 text-slate-600">
+                              {formatTime(
+                                item.heure_debut
+                              )}{" "}
+                              →{" "}
+                              {formatTime(
+                                item.heure_fin
+                              )}
+                            </td>
+
+                            <td className="px-5 py-4">
+                              <StatusBadge
+                                status={
+                                  item.statut
+                                }
+                              />
+                            </td>
+                          </tr>
+                        )
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <EmptyState text="Aucun agent absent ou remplacé sur cette journée." />
+              )}
+            </article>
+
+            {/* Congés à venir */}
+            <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+              <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+                <div>
+                  <h3 className="font-bold text-slate-900">
+                    Congés à venir
+                  </h3>
+
+                  <p className="mt-1 text-xs text-slate-500">
+                    Échéances des 14 prochains jours
+                  </p>
+                </div>
+
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                  {alertesAbsences?.length || 0}
+                </span>
+              </div>
+
+              {alertesAbsences?.length ? (
+                <div className="divide-y divide-slate-100">
+                  {alertesAbsences.map(
+                    (absence) => (
+                      <div
+                        key={absence.id}
+                        className="px-5 py-4 transition hover:bg-slate-50"
+                      >
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <p className="font-semibold text-slate-900">
+                             {getRelationName(
+  absence.agents,
+  "Agent non renseigné"
+)}
+                            </p>
+
+                            <p className="mt-1 text-sm text-slate-600">
+                              {absence.type ||
+                                "Absence"}{" "}
+                              du{" "}
+                              {formatDate(
+                                absence.date_debut
+                              )}{" "}
+                              au{" "}
+                              {formatDate(
+                                absence.date_fin
+                              )}
+                            </p>
+                          </div>
+
+                          <span className="w-fit rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                            {absence.statut_validation ||
+                              "À traiter"}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  )}
+                </div>
+              ) : (
+                <EmptyState text="Aucun congé prévu dans les 14 prochains jours." />
+              )}
+            </article>
+          </div>
+        </section>
+      </div>
+    </main>
+  )
+}
+
+function KpiCard({
+  item,
+}: {
+  item: KpiItem
+}) {
+  const Icon = item.icon
+
+  const content = (
+    <div className="h-full rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-amber-300 hover:shadow-md">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-sm font-medium text-slate-600">
+            {item.label}
+          </p>
+
+          <p
+            className={`mt-4 text-3xl font-bold ${item.color}`}
+          >
+            {item.value}
+          </p>
+
+          <p className="mt-2 text-xs text-slate-500">
+            Données actualisées
+          </p>
         </div>
 
-        <div
-  className="grid gap-6"
-  style={{
-    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-  }}
->
-          {kpis.map((item) => {
-  const Icon = item.icon
-  const cardContent = (
-    <div className="bg-[#0f172a] border border-slate-800 p-6 rounded-2xl shadow-lg hover:border-yellow-500/40 transition">
-      <div className="flex items-center justify-between">
-        <p className="text-slate-400 text-sm">{item.label}</p>
-        <Icon size={20} className={item.color} />
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-50">
+          <Icon
+            className={`h-5 w-5 ${item.color}`}
+          />
+        </div>
       </div>
-
-      <h3 className={`text-4xl font-bold mt-4 ${item.color}`}>
-        {item.value}
-      </h3>
-
-      <p className="text-xs text-slate-500 mt-2">
-        Mise à jour aujourd’hui
-      </p>
     </div>
   )
 
-  if (item.label === "Structures") {
+  if (item.href) {
     return (
       <Link
-  key={item.label}
-  href="/dashboard/structures"
-  className="block cursor-pointer"
->
-        {cardContent}
+        href={item.href}
+        className="block h-full rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+      >
+        {content}
       </Link>
     )
   }
 
+  return content
+}
+
+function StatusBadge({
+  status,
+}: {
+  status: string | null
+}) {
+  const normalized =
+    status?.trim().toLowerCase() || ""
+
+  const isAbsent =
+    normalized === "absent" ||
+    normalized === "absence"
+
   return (
-    <div key={item.label}>
-      {cardContent}
+    <span
+      className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${
+        isAbsent
+          ? "border-red-200 bg-red-50 text-red-700"
+          : "border-amber-200 bg-amber-50 text-amber-700"
+      }`}
+    >
+      {status || "Non renseigné"}
+    </span>
+  )
+}
+
+function EmptyState({
+  text,
+}: {
+  text: string
+}) {
+  return (
+    <div className="flex min-h-40 items-center justify-center px-6 py-10 text-center">
+      <div>
+        <ShieldCheck className="mx-auto h-8 w-8 text-emerald-500" />
+
+        <p className="mt-3 text-sm text-slate-500">
+          {text}
+        </p>
+      </div>
     </div>
   )
-})}
-        </div>
+}
 
-        <div className="mt-8 bg-[#0f172a] border border-amber-500/30 rounded-2xl p-6">
-          <h3 className="text-xl font-bold text-amber-300 mb-4">
-            ⚠️ Situation opérationnelle du jour
-          </h3>
+type NamedRelation = {
+  nom?: string | null
+}
 
-          <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6">
-            <h4 className="text-lg font-bold text-yellow-400 mb-4">
-              Absents et remplacements
-            </h4>
+function getRelationName(
+  relation:
+    | NamedRelation
+    | NamedRelation[]
+    | null
+    | undefined,
+  fallback: string
+) {
+  if (Array.isArray(relation)) {
+    return relation[0]?.nom || fallback
+  }
 
-            {absentsJour?.length ? (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-700">
-                    <th className="text-left py-3">Agent</th>
-                    <th className="text-left py-3">Site</th>
-                    <th className="text-left py-3">Horaire</th>
-                    <th className="text-left py-3">Statut</th>
-                  </tr>
-                </thead>
+  return relation?.nom || fallback
+}
 
-                <tbody>
-                  {absentsJour.map((item) => (
-                    <tr key={item.id} className="border-b border-slate-800">
-                      <td className="py-3">
-                        {item.agents?.nom || "Agent non renseigné"}
-                      </td>
-
-                      <td className="py-3 text-slate-400">
-                        {item.sites?.nom || "Site non renseigné"}
-                      </td>
-
-                      <td className="py-3 text-slate-400">
-                        {item.heure_debut || "-"} / {item.heure_fin || "-"}
-                      </td>
-
-                      <td
-                        className={
-                          item.statut === "Absent" || item.statut === "Absence"
-                            ? "py-3 text-red-400 font-semibold"
-                            : "py-3 text-amber-400 font-semibold"
-                        }
-                      >
-                        {item.statut}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <p className="text-slate-400 text-sm">
-                Aucun agent absent ou remplacé sur cette journée.
-              </p>
-            )}
-          </div>
-
-          <div className="mt-6 bg-[#111827] border border-slate-800 rounded-2xl p-6">
-            <h4 className="text-lg font-bold text-yellow-400 mb-4">
-              Congés à venir sous 14 jours
-            </h4>
-
-            {alertesAbsences?.length ? (
-              <div className="space-y-3">
-                {alertesAbsences.map((absence) => (
-                  <div
-                    key={absence.id}
-                    className="border border-slate-800 rounded-xl p-4 bg-[#020817]"
-                  >
-                    <p className="font-semibold">
-                      {absence.agents?.nom || "Agent non renseigné"}
-                    </p>
-
-                    <p className="text-sm text-slate-400">
-                      {absence.type} du {absence.date_debut} au{" "}
-                      {absence.date_fin}
-                    </p>
-
-                    <p className="text-xs text-amber-300 mt-1">
-                      Statut : {absence.statut_validation}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-slate-400 text-sm">
-                Aucun congé prévu dans les 14 prochains jours.
-              </p>
-            )}
-          </div>
-        </div>
-      </main>
-    </div>
+function isValidIsoDate(
+  value?: string | null
+) {
+  return Boolean(
+    value &&
+      /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+      !Number.isNaN(
+        new Date(
+          `${value}T12:00:00`
+        ).getTime()
+      )
   )
+}
+
+function formatDate(
+  value?: string | null
+) {
+  if (!value) return "Date non renseignée"
+
+  const date = new Date(`${value}T12:00:00`)
+
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return new Intl.DateTimeFormat(
+    "fr-FR"
+  ).format(date)
+}
+
+function formatTime(
+  value?: string | null
+) {
+  if (!value) return "—"
+
+  return value.slice(0, 5).replace(":", "h")
 }

@@ -27,6 +27,7 @@ type SearchParams = {
   date?: string
   site?: string
   agent?: string
+  technique?: string
 }
 
 type PlanningItem = {
@@ -54,6 +55,7 @@ export default async function PlanningPage({
   params?.date || new Date().toISOString().slice(0, 10)
   const selectedSite = params?.site || ""
   const searchAgent = params?.agent || ""
+  const showTechnicalData = params?.technique === "1"
 
  const { data: planning, error } = await supabase
   .from("planning_journalier")
@@ -119,21 +121,44 @@ export default async function PlanningPage({
   }))
 
   return (
-    <main className="min-h-screen bg-[#020817] text-slate-100 p-8">
-      <div className="mx-auto w-full max-w-[1800px] space-y-6">
-        <Link
-          href="/dashboard"
-          className="inline-flex px-4 py-2 rounded-xl border border-slate-700 bg-[#111827] hover:border-yellow-500/50 hover:text-yellow-300 transition"
-        >
-          ← Retour Dashboard
-        </Link>
+    <main className="min-h-screen bg-slate-100 px-4 py-6 text-slate-900 sm:px-6 xl:px-8">
+      <div className="w-full space-y-6">
+        <div className="flex flex-wrap items-center gap-3">
+          <Link
+            href="/dashboard"
+            className="inline-flex rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:border-amber-400 hover:text-amber-700"
+          >
+            ← Retour Dashboard
+          </Link>
+
+          <Link
+            href={`/dashboard/planning/supervision?date=${selectedDate}`}
+            className="inline-flex rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-800 shadow-sm transition hover:border-amber-400 hover:bg-amber-100"
+          >
+            {selectedSite
+              ? "← Retour à la supervision"
+              : "Vue supervision"}
+          </Link>
+        </div>
 
         <PlanningHeader />
 
-        <PlanningToolbar />
+        <div className="flex justify-end">
+          <Link
+            href={`/dashboard/planning?date=${selectedDate}${selectedSite ? `&site=${encodeURIComponent(selectedSite)}` : ""}${searchAgent ? `&agent=${encodeURIComponent(searchAgent)}` : ""}${showTechnicalData ? "" : "&technique=1"}`}
+            className="inline-flex rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:border-amber-400 hover:text-amber-700"
+          >
+            {showTechnicalData
+              ? "Masquer les données techniques"
+              : "Afficher les données techniques"}
+          </Link>
+        </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-[#0f172a] p-4">
-          <div className="text-sm text-slate-400">
+
+        <PlanningToolbar selectedDate={selectedDate} />
+
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="text-sm text-slate-600">
             Export, import et ajout manuel restent disponibles pendant la refonte du planning.
           </div>
 
@@ -155,8 +180,8 @@ export default async function PlanningPage({
             </Link>
 
             <Link
-              href="/dashboard/planning/new"
-              className="px-4 py-2 rounded-xl bg-yellow-500 text-slate-950 font-semibold"
+              href={`/dashboard/planning/new?date=${selectedDate}${selectedSite ? `&site=${encodeURIComponent(selectedSite)}` : ""}`}
+              className="rounded-xl bg-amber-500 px-4 py-3 font-semibold text-slate-950 transition hover:bg-amber-400"
             >
               + Ajouter une affectation
             </Link>
@@ -164,25 +189,25 @@ export default async function PlanningPage({
         </div>
 
         <form
-          className="grid gap-4 bg-[#0f172a] border border-slate-800 rounded-2xl p-4"
+          className="grid gap-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
           style={{ gridTemplateColumns: "repeat(4, minmax(0, 1fr))" }}
         >
           <div>
-            <label className="block text-sm text-slate-400 mb-2">Date</label>
+            <label className="mb-2 block text-sm font-medium text-slate-600">Date</label>
             <input
               type="date"
               name="date"
               defaultValue={selectedDate}
-              className="w-full rounded-xl bg-[#020817] border border-slate-700 px-4 py-2 text-slate-100"
+              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-amber-400"
             />
           </div>
 
           <div>
-            <label className="block text-sm text-slate-400 mb-2">Site</label>
+            <label className="mb-2 block text-sm font-medium text-slate-600">Site</label>
             <select
               name="site"
               defaultValue={selectedSite}
-              className="w-full rounded-xl bg-[#020817] border border-slate-700 px-4 py-2 text-slate-100"
+              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-amber-400"
             >
               <option value="">Tous les sites</option>
               {sites.map((site) => (
@@ -194,27 +219,27 @@ export default async function PlanningPage({
           </div>
 
           <div>
-            <label className="block text-sm text-slate-400 mb-2">Agent</label>
+            <label className="mb-2 block text-sm font-medium text-slate-600">Agent</label>
             <input
               type="text"
               name="agent"
               defaultValue={searchAgent}
               placeholder="Rechercher un agent"
-              className="w-full rounded-xl bg-[#020817] border border-slate-700 px-4 py-2 text-slate-100"
+              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-amber-400"
             />
           </div>
 
           <div className="flex items-end gap-3">
             <button
               type="submit"
-              className="px-4 py-2 rounded-xl bg-yellow-500 text-slate-950 font-semibold"
+              className="rounded-xl bg-amber-500 px-4 py-3 font-semibold text-slate-950 transition hover:bg-amber-400"
             >
               Filtrer
             </button>
 
             <Link
               href="/dashboard/planning"
-              className="px-4 py-2 rounded-xl border border-slate-700 text-slate-300"
+              className="rounded-xl border border-slate-300 bg-white px-4 py-3 font-semibold text-slate-700 transition hover:border-amber-400 hover:text-amber-700"
             >
               Réinitialiser
             </Link>
@@ -233,25 +258,29 @@ export default async function PlanningPage({
 
         <div
           className="grid gap-6 items-start"
-          style={{ gridTemplateColumns: "minmax(0, 1fr) 340px" }}
+          style={{ gridTemplateColumns: "minmax(0, 1fr) 320px" }}
         >
-         <PlanningGrid selectedDate={selectedDate} />
+          <PlanningGrid
+            selectedDate={selectedDate}
+            selectedSite={selectedSite}
+          />
 
           <PlanningSidebar selectedDate={selectedDate} />
         </div>
 
-        <div className="bg-[#0f172a] border border-slate-800 rounded-2xl overflow-hidden">
-          <div className="bg-[#111827] border-b border-slate-800 p-4">
-            <h2 className="text-xl font-bold text-yellow-400">
+        {showTechnicalData && (
+        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 bg-slate-50 p-5">
+            <h2 className="text-xl font-bold text-slate-900">
               Données importées
             </h2>
-            <p className="text-sm text-slate-400 mt-1">
+            <p className="mt-1 text-sm text-slate-600">
               Vue technique conservée pendant la migration vers le planning opérationnel.
             </p>
           </div>
 
           <div
-            className="grid bg-[#111827] border-b border-slate-800 text-sm font-semibold text-slate-300"
+            className="grid border-b border-slate-200 bg-slate-50 text-sm font-semibold text-slate-600"
             style={{ gridTemplateColumns: "repeat(6, minmax(0, 1fr))" }}
           >
             <div className="p-4">Agent</div>
@@ -263,14 +292,14 @@ export default async function PlanningPage({
           </div>
 
           {filteredPlanning.length === 0 ? (
-            <div className="p-6 text-slate-400">
+            <div className="p-6 text-slate-500">
               Aucun planning trouvé avec ces filtres.
             </div>
           ) : (
             filteredPlanning.map((item) => (
               <div
                 key={item.id}
-                className="grid border-b border-slate-800 last:border-b-0 text-sm"
+                className="grid border-b border-slate-100 text-sm last:border-b-0 hover:bg-slate-50"
                 style={{ gridTemplateColumns: "repeat(6, minmax(0, 1fr))" }}
               >
                 <div className="p-4">
@@ -295,6 +324,7 @@ export default async function PlanningPage({
             ))
           )}
         </div>
+        )}
       </div>
     </main>
   )
@@ -310,16 +340,16 @@ function PlanningStat({
   color?: "slate" | "emerald" | "red" | "purple"
 }) {
   const styles = {
-    slate: "bg-slate-800 border-slate-700 text-white",
-    emerald: "bg-emerald-500/10 border-emerald-500/30 text-emerald-300",
-    red: "bg-red-500/10 border-red-500/30 text-red-300",
-    purple: "bg-purple-500/10 border-purple-500/30 text-purple-300",
+    slate: "border-slate-200 bg-white text-slate-900",
+    emerald: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    red: "border-red-200 bg-red-50 text-red-700",
+    purple: "border-violet-200 bg-violet-50 text-violet-700",
   }
 
   return (
-    <div className={`rounded-2xl border p-4 ${styles[color]}`}>
-      <p className="text-slate-400 text-sm">{title}</p>
-      <p className="text-3xl font-bold">{value}</p>
+    <div className={`rounded-3xl border p-5 shadow-sm ${styles[color]}`}>
+      <p className="text-sm font-medium text-slate-600">{title}</p>
+      <p className="mt-2 text-3xl font-bold">{value}</p>
     </div>
   )
 }

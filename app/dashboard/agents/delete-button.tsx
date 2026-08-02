@@ -3,22 +3,29 @@
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 
-export default function DeleteAgentButton({ id }: { id: number }) {
+export default function DeleteAgentButton({
+  id,
+}: {
+  id: number
+}) {
   const router = useRouter()
 
-  async function supprimerAgent() {
-    const ok = confirm("Supprimer cet agent ?")
+  async function archiverAgent() {
+    const ok = confirm(
+      "Archiver cet agent ? Il ne sera plus actif mais toutes ses données seront conservées."
+    )
 
     if (!ok) return
 
     const { error } = await supabase
       .from("agents")
-      .delete()
+      .update({
+        statut: "Inactif",
+      })
       .eq("id", id)
 
     if (error) {
-      alert("Erreur suppression")
-      console.log(error)
+      alert(error.message)
       return
     }
 
@@ -27,10 +34,10 @@ export default function DeleteAgentButton({ id }: { id: number }) {
 
   return (
     <button
-      onClick={supprimerAgent}
-      className="ml-2 px-3 py-1 rounded-lg bg-red-500 text-white text-sm"
+      onClick={archiverAgent}
+      className="ml-2 px-3 py-1 rounded-lg bg-slate-700 text-white text-sm hover:bg-slate-800"
     >
-      Supprimer
+      Archiver
     </button>
   )
 }

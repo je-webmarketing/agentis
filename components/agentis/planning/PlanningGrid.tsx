@@ -11,11 +11,17 @@ import { planningSlots } from "@/lib/planning/slots"
 import { PlanningService } from "@/lib/services/PlanningService"
 import { SiteService } from "@/lib/services/SiteService"
 import type { PlanningSlotItem } from "./PlanningSlot"
+import AddAssignmentDialog from "../dialogs/AddAssignmentDialog"
+import PlanningEngine from "@/lib/planning/PlanningEngine"
+import PlanningRequirementsService, {
+  type PlanningRequirementRow,
+} from "@/lib/services/PlanningRequirementsService"
 
 type SiteStatus = "ok" | "warning" | "danger"
 
 type PlanningGridProps = {
   selectedDate?: string
+  selectedSite?: string
 }
 
 type PlanningRow = {
@@ -45,6 +51,9 @@ type SiteRow = {
   name: string
   status: SiteStatus
   alerts: number
+  expected: number
+  assigned: number
+  coverage: number
   slots: Record<string, PlanningSlotItem[]>
 }
 
@@ -73,11 +82,6 @@ function isVacancy(row: PlanningRow) {
   )
 }
 
-function getSiteStatus(alerts: number): SiteStatus {
-  if (alerts >= 2) return "danger"
-  if (alerts === 1) return "warning"
-  return "ok"
-}
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {
@@ -134,13 +138,25 @@ function getErrorMessage(error: unknown): string {
 
 export default function PlanningGrid({
   selectedDate = "",
+  selectedSite = "",
 }: PlanningGridProps) {
   const [planningRows, setPlanningRows] = useState<PlanningRow[]>([])
   const [siteRecords, setSiteRecords] = useState<SiteRecord[]>([])
+  const [requirementRows, setRequirementRows] =
+    useState<PlanningRequirementRow[]>([])
   
   const [loading, setLoading] = useState(true)
   const [moving, setMoving] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
+
+const [editSource, setEditSource] =
+  useState<PlanningRow | null>(null)
+
+ const [
+  duplicateSource,
+  setDuplicateSource,
+] = useState<PlanningRow | null>(null)
+
 
   const loadPlanning = useCallback(
   async (dateOverride?: string) => {
@@ -149,6 +165,7 @@ export default function PlanningGrid({
     if (!dateToLoad) {
       setPlanningRows([])
       setSiteRecords([])
+      setRequirementRows([])
       setErrorMessage("")
       setLoading(false)
       return
@@ -161,9 +178,14 @@ export default function PlanningGrid({
       setPlanningRows([])
       setSiteRecords([])
 
-      const [planningData, sitesData] = await Promise.all([
+      const [
+        planningData,
+        sitesData,
+        requirementsData,
+      ] = await Promise.all([
         PlanningService.getDay(dateToLoad),
         SiteService.list(),
+        PlanningRequirementsService.list(),
       ])
 
       setPlanningRows(
@@ -181,9 +203,16 @@ export default function PlanningGrid({
             )
           : []
       )
+
+      setRequirementRows(
+        Array.isArray(requirementsData)
+          ? requirementsData
+          : []
+      )
     } catch (error: unknown) {
       setPlanningRows([])
       setSiteRecords([])
+      setRequirementRows([])
 
       setErrorMessage(
         getErrorMessage(error) ||
@@ -231,8 +260,23 @@ export default function PlanningGrid({
     }
   }, [selectedDate])
 
+  const requirementsBySite = useMemo(
+    () =>
+      PlanningRequirementsService.buildBySite(
+        requirementRows
+      ),
+    [requirementRows]
+  )
+
   const sites = useMemo<SiteRow[]>(() => {
-    return siteRecords.map((site) => {
+    const visibleSiteRecords = selectedSite
+      ? siteRecords.filter(
+          (site) =>
+            normalize(site.nom) === normalize(selectedSite)
+        )
+      : siteRecords
+
+    return visibleSiteRecords.map((site) => {
       const rowsForSite = planningRows.filter(
         (row) =>
           String(row.site_id) === String(site.id)
@@ -278,18 +322,78 @@ if (agentName) {
 }
       })
 
-      const alerts =
-        rowsForSite.filter(isVacancy).length
+      const siteRequirements =
+        requirementsBySite[String(site.id)] || {}
+
+      const slotCoverages = planningSlots.map((slot) => {
+        const slotRows = rowsForSite.filter(
+          (row) => row.service === slot.key
+        )
+
+        const assigned = slotRows.filter(
+          (row) => !isVacancy(row)
+        ).length
+
+        const expected =
+          siteRequirements[slot.key] ?? 0
+
+        return PlanningEngine.computeCoverageFromCounts(
+          expected,
+          assigned
+        )
+      })
+
+      const alerts = slotCoverages.reduce(
+        (total, coverage) =>
+          total + coverage.missing,
+        0
+      )
+
+      const totalExpected = slotCoverages.reduce(
+        (total, coverage) =>
+          total + coverage.expected,
+        0
+      )
+
+      const totalAssigned = slotCoverages.reduce(
+        (total, coverage) =>
+          total + coverage.assigned,
+        0
+      )
+
+      const coveredAssignments = slotCoverages.reduce(
+        (total, coverage) =>
+          total +
+          Math.min(
+            coverage.assigned,
+            coverage.expected
+          ),
+        0
+      )
+
+      const siteCoverage =
+        PlanningEngine.computeCoverageFromCounts(
+          totalExpected,
+          coveredAssignments
+        )
 
       return {
         id: site.id,
         name: site.nom,
         alerts,
-        status: getSiteStatus(alerts),
+        expected: totalExpected,
+        assigned: totalAssigned,
+        coverage: siteCoverage.coverage,
+        status: siteCoverage.status,
         slots: slotContent,
       }
     })
-  }, [planningRows, siteRecords])
+  }, [
+    planningRows,
+    requirementsBySite,
+    selectedSite,
+    siteRecords,
+  ])
 
   async function deleteVacancy(
   vacancyId: string | number
@@ -542,17 +646,41 @@ if (agentName) {
   }
 
   const gridTemplateColumns =
-  `220px repeat(${planningSlots.length}, minmax(220px, 1fr)) 100px`
+    `190px repeat(${planningSlots.length}, minmax(185px, 1fr)) 130px`
 
   if (loading) {
     return (
-      <section className="rounded-3xl border border-slate-800 bg-[#0f172a] p-8 text-slate-400">
+      <section className="rounded-3xl border border-slate-200 bg-white p-8 text-slate-600 shadow-sm">
         Chargement du planning…
       </section>
     )
   }
 
-  async function duplicateAssignment(
+ function duplicateAssignment(
+  assignmentId: string | number
+) {
+  const source = planningRows.find(
+    (row) =>
+      String(row.id) === String(assignmentId)
+  )
+
+  if (!source) {
+    setErrorMessage("Affectation introuvable.")
+    return
+  }
+
+  if (source.agent_id === null || isVacancy(source)) {
+    setErrorMessage(
+      "Un poste vacant ne peut pas être dupliqué comme une affectation agent."
+    )
+    return
+  }
+
+  setErrorMessage("")
+  setDuplicateSource(source)
+}
+
+function editAssignment(
   assignmentId: string | number
 ) {
   const source = planningRows.find(
@@ -564,74 +692,72 @@ if (agentName) {
     return
   }
 
-
-if (source.agent_id === null) {
-  setErrorMessage(
-    "Un poste vacant ne peut pas être dupliqué comme une affectation agent."
-  )
-  return
-}
-  try {
-    setErrorMessage("")
-
-    await PlanningService.createAssignment({
-      date: selectedDate,
-      agent_id: source.agent_id,
-      site_id: source.site_id,
-      service: source.service,
-      heure_debut: source.heure_debut,
-      heure_fin: source.heure_fin,
-      statut: source.statut || "Présent",
-      commentaire: source.commentaire || "",
-    })
-
-    await loadPlanning(selectedDate)
-  } catch (error: unknown) {
+  if (source.agent_id === null || isVacancy(source)) {
     setErrorMessage(
-      getErrorMessage(error) ||
-        "Impossible de dupliquer cette affectation."
+      "Un poste vacant ne peut pas être modifié comme une affectation agent."
     )
+    return
   }
-}
 
+  setErrorMessage("")
+  setEditSource(source)
+}
+ 
   return (
-    <section className="overflow-hidden rounded-3xl border border-slate-800 bg-[#0f172a]">
-      <div className="flex items-center justify-between gap-4 border-b border-slate-800 bg-[#111827] px-6 py-5">
+    <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 bg-white px-6 py-5">
         <div>
-          <h2 className="text-xl font-bold text-yellow-300">
+          <h2 className="text-xl font-bold text-amber-600">
             Planning opérationnel
           </h2>
 
-          <p className="mt-1 text-sm text-slate-400">
+          <p className="mt-1 text-sm text-slate-600">
             Planning du{" "}
-            {selectedDate || "jour sélectionné"}—
+            {selectedDate || "jour sélectionné"}
+            {selectedSite ? ` · ${selectedSite}` : ""} —
             déplacements enregistrés dans Supabase.
           </p>
         </div>
 
         {moving && (
-          <span className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-300">
+          <span className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
             Enregistrement…
           </span>
         )}
       </div>
 
       {errorMessage && (
-        <div className="border-b border-red-500/20 bg-red-500/10 px-6 py-3 text-sm text-red-300">
+        <div className="border-b border-red-200 bg-red-50 px-6 py-3 text-sm text-red-700">
           {errorMessage}
         </div>
       )}
 
       {sites.length === 0 ? (
-        <div className="p-8 text-slate-400">
-          Aucun site disponible pour le{" "}
-          {selectedDate || "jour sélectionné"}.
+        <div className="p-8 text-slate-600">
+          {selectedSite
+            ? `Le site « ${selectedSite} » est introuvable pour le ${
+                selectedDate || "jour sélectionné"
+              }.`
+            : `Aucun site disponible pour le ${
+                selectedDate || "jour sélectionné"
+              }.`}
         </div>
       ) : (
-        <div className="overflow-x-auto">
-          <div className="min-w-[1500px]">
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-6 py-3">
+            <div className="text-sm text-slate-600">
+              {sites.length} site(s) affiché(s) · {planningSlots.length} créneau(x)
+            </div>
+
+            <div className="text-xs font-medium text-slate-500">
+              Glissez une affectation vers un autre créneau pour la déplacer.
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+          <div className="min-w-[1380px]">
             <div
-              className="grid border-b border-slate-800 bg-[#020817] text-xs font-semibold uppercase tracking-[0.14em] text-slate-500"
+              className="sticky top-0 z-20 grid border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500"
               style={{ gridTemplateColumns }}
             >
               <div className="p-4">Site</div>
@@ -639,9 +765,9 @@ if (source.agent_id === null) {
               {planningSlots.map((slot) => (
                 <div
                   key={slot.key}
-                  className="border-l border-slate-800 p-4"
+                  className="border-l border-slate-200 p-4"
                 >
-                  <div className="text-slate-300">
+                  <div className="text-slate-800">
                     {slot.shortLabel}
                   </div>
 
@@ -651,29 +777,62 @@ if (source.agent_id === null) {
                 </div>
               ))}
 
-              <div className="border-l border-slate-800 p-4 text-center">
+              <div className="border-l border-slate-200 p-4 text-center">
                 Manquants
               </div>
             </div>
 
            {sites.map((site) => (
   <PlanningSiteRow
-    key={site.id}
-    site={site}
-    slots={planningSlots}
-    gridTemplateColumns={gridTemplateColumns}
-    selectedDate={selectedDate}
-    onAssignmentCreated={() =>
-      loadPlanning(selectedDate)
-    }
-    onDeleteVacancy={deleteVacancy}
-    onDuplicateAssignment={duplicateAssignment}
-    onMoveAgent={moveAgent}
-  />
+  key={site.id}
+  site={site}
+  slots={planningSlots}
+  gridTemplateColumns={gridTemplateColumns}
+  selectedDate={selectedDate}
+  onAssignmentCreated={() =>
+    loadPlanning(selectedDate)
+  }
+  onEditAssignment={editAssignment}
+  onMoveAssignment={editAssignment}
+  onDeleteVacancy={deleteVacancy}
+  onDuplicateAssignment={duplicateAssignment}
+  onMoveAgent={moveAgent}
+/>
 ))}
           </div>
         </div>
+        </>
       )}
+
+<AddAssignmentDialog
+  open={editSource !== null}
+  mode="edit"
+  selectedDate={selectedDate}
+  initialValues={
+    editSource && editSource.agent_id !== null
+      ? {
+          assignmentId: editSource.id,
+          agentId: editSource.agent_id,
+          siteId: editSource.site_id,
+          date: editSource.date || selectedDate,
+          slot: editSource.service as
+            | (typeof planningSlots)[number]["key"]
+            | null,
+          status: editSource.statut || "Présent",
+          start: editSource.heure_debut,
+          end: editSource.heure_fin,
+          commentaire: editSource.commentaire || "",
+        }
+      : null
+  }
+  onClose={() => {
+    setEditSource(null)
+  }}
+  onAssignmentCreated={async () => {
+    setEditSource(null)
+    await loadPlanning(selectedDate)
+  }}
+/>
     </section>
   )
 }

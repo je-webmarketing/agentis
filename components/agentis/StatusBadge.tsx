@@ -13,10 +13,18 @@ export default function StatusBadge({
     <span
       className={
         active
-          ? "inline-flex items-center px-3 py-1 rounded-lg bg-emerald-500/15 text-emerald-300 border border-emerald-500/20 text-sm font-medium"
-          : "inline-flex items-center px-3 py-1 rounded-lg bg-red-500/15 text-red-300 border border-red-500/20 text-sm font-medium"
+          ? "inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-1.5 text-sm font-semibold text-emerald-700 shadow-sm"
+          : "inline-flex items-center gap-2 rounded-full border border-red-200 bg-red-50 px-4 py-1.5 text-sm font-semibold text-red-700 shadow-sm"
       }
     >
+      <span
+        className={
+          active
+            ? "h-2.5 w-2.5 rounded-full bg-emerald-500"
+            : "h-2.5 w-2.5 rounded-full bg-red-500"
+        }
+      />
+
       {active ? activeLabel : inactiveLabel}
     </span>
   )

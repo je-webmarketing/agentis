@@ -179,65 +179,166 @@ export const PlanningService = {
 
     if (error) throw error
 
-    return data
+await this.logHistory({
+  assignment_id: data.id,
+  agent_id: data.agent_id,
+  action: "creation",
+  date_planning: data.date,
+
+  nouveau_site_id: data.site_id,
+  nouveau_service: data.service,
+
+  nouvelle_heure_debut: data.heure_debut,
+  nouvelle_heure_fin: data.heure_fin,
+
+  nouveau_statut: data.statut,
+
+  commentaire: data.commentaire,
+})
+
+return data
   },
 
   /**
    * Met à jour une affectation existante.
    */
-  async updateAssignment(
+
+ /**
+ * Renvoie l'historique du planning.
+ */
+/**
+ * Renvoie l’historique du planning.
+ */
+async listHistory(limit = 200) {
+  const { data, error } = await supabase
+    .from("planning_history")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(limit)
+
+  if (error) {
+    throw new Error(
+      error.message ||
+        "Impossible de charger l’historique du planning."
+    )
+  }
+
+  return data ?? []
+},
+
+ async updateAssignment(
     id: string | number,
-    payload: PlanningAssignmentUpdate
-  ) {
-    const { data, error } = await supabase
-      .from("planning_journalier")
-      .update(payload)
-      .eq("id", id)
-      .select(planningSelect)
-      .single()
+  payload: PlanningAssignmentUpdate,
+  historyAction: "modification" | "deplacement" = "modification"
+) {
 
-    if (error) throw error
+  console.log("ENTRÉE updateAssignment", {
+  id,
+  payload,
+})
+  const { data: before, error: beforeError } = await supabase
+    .from("planning_journalier")
+    .select(planningSelect)
+    .eq("id", id)
+    .single()
 
-    return data
-  },
+  if (beforeError) {
+    throw beforeError
+  }
 
-  /**
-   * Déplace une affectation vers un autre site,
-   * une autre date ou un autre créneau.
-   */
-  async moveAssignment(
-    id: string | number,
-    destination: {
-      date?: string
-      site_id?: string | number
-      service?: string | null
-      service_id?: string | number | null
-      heure_debut?: string | null
-      heure_fin?: string | null
-    }
-  ) {
-    return this.updateAssignment(id, destination)
-  },
+  const { data, error } = await supabase
+    .from("planning_journalier")
+    .update(payload)
+    .eq("id", id)
+    .select(planningSelect)
+    .single()
 
-  /**
-   * Change uniquement le statut d'une affectation.
-   */
-  async updateStatus(
-    id: string | number,
-    statut: string,
-    commentaire?: string | null
-  ) {
-    return this.updateAssignment(id, {
-      statut,
-      commentaire,
-    })
-  },
+  if (error) {
+    throw error
+  }
+  console.log("ÉCRITURE HISTORIQUE MODIFICATION", {
+  before,
+  after: data,
+})
+
+  await this.logHistory({
+    assignment_id: data.id,
+    agent_id: data.agent_id,
+    action: historyAction,
+    date_planning: data.date,
+
+    ancien_site_id: before.site_id,
+    nouveau_site_id: data.site_id,
+
+    ancien_service: before.service,
+    nouveau_service: data.service,
+
+    ancienne_heure_debut: before.heure_debut,
+    nouvelle_heure_debut: data.heure_debut,
+
+    ancienne_heure_fin: before.heure_fin,
+    nouvelle_heure_fin: data.heure_fin,
+
+    ancien_statut: before.statut,
+    nouveau_statut: data.statut,
+
+    commentaire: data.commentaire,
+  })
+
+  return data
+},
 
 /**
- * Supprime une affectation et vérifie que la ligne
- * a réellement été supprimée.
+ * Déplace une affectation vers un autre site,
+ * une autre date ou un autre créneau.
+ */
+async moveAssignment(
+  id: string | number,
+  destination: {
+    date?: string
+    site_id?: string | number
+    service?: string | null
+    service_id?: string | number | null
+    heure_debut?: string | null
+    heure_fin?: string | null
+  }
+) {
+  return this.updateAssignment(
+    id,
+    destination,
+    "deplacement"
+  )
+},
+
+/**
+ * Change uniquement le statut d'une affectation.
+ */
+async updateStatus(
+  id: string | number,
+  statut: string,
+  commentaire?: string | null
+) {
+  return this.updateAssignment(id, {
+    statut,
+    commentaire,
+  })
+},
+
+/**
+ * Supprime une affectation et conserve ses informations
+ * dans l'historique avant la suppression.
  */
 async deleteAssignment(id: string | number) {
+  const { data: before, error: beforeError } = await supabase
+    .from("planning_journalier")
+    .select(planningSelect)
+    .eq("id", id)
+    .single()
+
+  if (beforeError) {
+    throw beforeError
+  }
+
   const { data, error } = await supabase
     .from("planning_journalier")
     .delete()
@@ -250,9 +351,30 @@ async deleteAssignment(id: string | number) {
 
   if (!data || data.length === 0) {
     throw new Error(
-      `L’étiquette ${id} n’a pas pu être supprimée.`
+      `L’affectation ${id} n’a pas pu être supprimée.`
     )
   }
+
+  console.log("Historique modification", {
+  before,
+  after: data,
+})
+
+  await this.logHistory({
+    assignment_id: before.id,
+    agent_id: before.agent_id,
+    action: "suppression",
+    date_planning: before.date,
+
+    ancien_site_id: before.site_id,
+    ancien_service: before.service,
+
+    ancienne_heure_debut: before.heure_debut,
+    ancienne_heure_fin: before.heure_fin,
+
+    ancien_statut: before.statut,
+    commentaire: before.commentaire,
+  })
 
   return data[0]
 },
@@ -328,6 +450,50 @@ async deleteAssignment(id: string | number) {
 
     return data?.[0] ?? null
   },
+
+  async logHistory(payload: {
+  assignment_id?: string | number | null
+  agent_id?: string | number | null
+
+  action:
+    | "creation"
+    | "modification"
+    | "deplacement"
+    | "duplication"
+    | "remplacement"
+    | "suppression"
+
+  date_planning?: string | null
+
+  ancien_site_id?: string | number | null
+  nouveau_site_id?: string | number | null
+
+  ancien_service?: string | null
+  nouveau_service?: string | null
+
+  ancienne_heure_debut?: string | null
+  nouvelle_heure_debut?: string | null
+
+  ancienne_heure_fin?: string | null
+  nouvelle_heure_fin?: string | null
+
+  ancien_statut?: string | null
+  nouveau_statut?: string | null
+
+  commentaire?: string | null
+}) {
+  const { error } = await supabase
+    .from("planning_history")
+    .insert(payload)
+
+  if (error) {
+    console.error(
+      "Historique Planning :",
+      error
+    )
+  }
+},
+
 /**
  * Déplace une affectation et maintient les postes vacants.
  *
@@ -403,6 +569,30 @@ async moveAssignmentWithVacancy(params: {
       "Le déplacement n’a pas été appliqué par Supabase. La session utilisée par l’application ne possède probablement pas la permission UPDATE sur planning_journalier."
     )
   }
+
+  await this.logHistory({
+  assignment_id: movedAssignment.id,
+  agent_id: movedAssignment.agent_id,
+  action: "deplacement",
+  date_planning: movedAssignment.date,
+
+  ancien_site_id: params.sourceSiteId,
+  nouveau_site_id: movedAssignment.site_id,
+
+  ancien_service: params.sourceService,
+  nouveau_service: movedAssignment.service,
+
+  ancienne_heure_debut: params.sourceStart,
+  nouvelle_heure_debut: movedAssignment.heure_debut,
+
+  ancienne_heure_fin: params.sourceEnd,
+  nouvelle_heure_fin: movedAssignment.heure_fin,
+
+  ancien_statut: "Présent",
+  nouveau_statut: movedAssignment.statut,
+
+  commentaire: movedAssignment.commentaire,
+})
 
   /*
    * 3. Suppression de la vacance présente sur la destination.

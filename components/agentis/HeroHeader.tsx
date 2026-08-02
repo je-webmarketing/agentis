@@ -24,14 +24,10 @@ export default function HeroHeader({
   })
 
   return (
-    <section className="relative overflow-hidden rounded-[30px] border border-yellow-500/20 bg-gradient-to-br from-[#111827] via-[#08111d] to-[#020817] p-8 shadow-2xl">
-
-      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-yellow-400/60 to-transparent" />
+    <section className="relative overflow-hidden rounded-[30px] border border-slate-200 bg-white p-10 shadow-lg">
+      <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-yellow-400 via-amber-500 to-yellow-400" />
 
       <div className="relative z-10">
-
-        {/* HEADER */}
-
         <div
           style={{
             display: "flex",
@@ -42,33 +38,31 @@ export default function HeroHeader({
           }}
         >
           <div>
-            <div className="text-xs uppercase tracking-[0.35em] text-yellow-300 font-semibold">
+            <div className="text-xs font-bold uppercase tracking-[0.35em] text-amber-600">
               AGENTIS RH Intelligence
             </div>
 
-            <h1 className="mt-2 text-5xl font-bold text-white">
+            <h1 className="mt-3 text-5xl font-bold tracking-tight text-slate-900">
               {title}
             </h1>
 
             {subtitle && (
-              <p className="mt-3 text-slate-300 max-w-3xl leading-6">
+              <p className="mt-4 max-w-3xl text-lg leading-8 text-slate-600">
                 {subtitle}
               </p>
             )}
           </div>
 
-          <div className="rounded-2xl border border-slate-700 bg-white/5 px-6 py-4">
-            <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-6 py-5 shadow-sm">
+            <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
               Aujourd'hui
             </div>
 
-            <div className="mt-2 text-sm text-slate-200 capitalize">
+            <div className="mt-2 text-base font-semibold capitalize text-slate-800">
               {today}
             </div>
           </div>
         </div>
-
-        {/* KPI */}
 
         {stats.length > 0 && (
           <div
@@ -86,21 +80,19 @@ export default function HeroHeader({
                   flex: "1 1 180px",
                   minWidth: 170,
                 }}
-                className="rounded-2xl border border-slate-700 bg-[#07111d]/70 p-5"
+                className="rounded-2xl border border-slate-200 bg-slate-50 p-6 shadow-sm"
               >
-                <div className="text-4xl font-bold text-white">
+                <div className="text-4xl font-bold text-slate-900">
                   {stat.value}
                 </div>
 
-                <div className="mt-2 uppercase tracking-[0.18em] text-xs text-slate-400">
+                <div className="mt-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                   {stat.label}
                 </div>
               </div>
             ))}
           </div>
         )}
-
-        {/* ACTIONS */}
 
         <div
           style={{
@@ -115,7 +107,6 @@ export default function HeroHeader({
           <HeroAction href="/dashboard/documents" label="Documents" />
           <HeroAction href="/dashboard/absences" label="Absences" />
         </div>
-
       </div>
     </section>
   )
@@ -131,7 +122,7 @@ function HeroAction({
   return (
     <Link
       href={href}
-      className="rounded-xl border border-slate-700 bg-white/5 px-5 py-3 text-sm font-medium text-slate-200 transition hover:border-yellow-400/50 hover:bg-yellow-400/10"
+      className="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-yellow-400 hover:bg-yellow-50 hover:text-yellow-700"
     >
       {label}
     </Link>
