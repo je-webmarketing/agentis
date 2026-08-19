@@ -13,8 +13,11 @@ import {
   type LucideIcon,
 } from "lucide-react"
 
-import AgentEngine from "@/lib/services/AgentEngine"
-import { supabase } from "@/lib/supabase"
+import DashboardEngine from "@/lib/services/dashboard/DashboardEngine"
+import {
+  createClient as createServerSupabaseClient,
+} from "@/lib/supabase/server"
+import { redirect } from "next/navigation"
 
 type KpiItem = {
   label: string
@@ -25,10 +28,36 @@ type KpiItem = {
 }
 
 export default async function DashboardPage() {
-  const today = new Date()
+  const supabase =
+  await createServerSupabaseClient()
 
-  const engineStats =
-    await AgentEngine.getDashboardStats()
+const {
+  data: { user },
+} = await supabase.auth.getUser()
+
+if (!user) {
+  return null
+}
+
+const { data: profile } = await supabase
+  .from("profiles")
+  .select(`
+    role,
+    actif,
+    structure_id,
+    site_id,
+    service_id
+  `)
+  .eq("id", user.id)
+  .single()
+
+const userRole = profile?.role ?? null
+
+if (userRole === "agent") {
+  redirect("/dashboard/mon-espace")
+}
+
+  const today = new Date()
 
   const in14Days = new Date(today)
   in14Days.setDate(in14Days.getDate() + 14)
@@ -36,117 +65,112 @@ export default async function DashboardPage() {
   const todayIso = today.toISOString().slice(0, 10)
   const limitIso = in14Days.toISOString().slice(0, 10)
 
-  /*
-   * Date active partagée avec le planning.
-   * Elle est enregistrée dans un cookie par PlanningToolbar.
-   */
   const cookieStore = await cookies()
   const storedDate =
     cookieStore.get("agentis_active_date")?.value
 
-  const dashboardDate =
-    isValidIsoDate(storedDate)
-      ? String(storedDate)
-      : todayIso
+  const dashboardDate = isValidIsoDate(storedDate)
+    ? String(storedDate)
+    : todayIso
 
-  /*
-   * Indicateurs principaux.
-   */
-  const { count: presentsCount } = await supabase
-    .from("planning_journalier")
-    .select("*", {
-      count: "exact",
-      head: true,
-    })
-    .eq("date", dashboardDate)
-    .eq("statut", "Présent")
+  const [
+    engineStats,
+    presentsResult,
+    absentsResult,
+    remplacesResult,
+    congesAVenirResult,
+    congesValidesResult,
+    demandesEnAttenteResult,
+    structuresResult,
+    absentsJourResult,
+    alertesAbsencesResult,
+  ] = await Promise.all([
+   await DashboardEngine.getStats(),
 
-  const { count: absentsCount } = await supabase
-    .from("planning_journalier")
-    .select("*", {
-      count: "exact",
-      head: true,
-    })
-    .eq("date", dashboardDate)
-    .in("statut", ["Absent", "Absence"])
+    supabase
+      .from("planning_journalier")
+      .select("id", {
+        count: "exact",
+        head: true,
+      })
+      .eq("date", dashboardDate)
+      .eq("statut", "Présent"),
 
-  const { count: remplacesCount } = await supabase
-    .from("planning_journalier")
-    .select("*", {
-      count: "exact",
-      head: true,
-    })
-    .eq("date", dashboardDate)
-    .eq("statut", "Remplacé")
+    supabase
+      .from("planning_journalier")
+      .select("id", {
+        count: "exact",
+        head: true,
+      })
+      .eq("date", dashboardDate)
+      .in("statut", ["Absent", "Absence"]),
 
-  const { count: congesAVenirCount } =
-    await supabase
+    supabase
+      .from("planning_journalier")
+      .select("id", {
+        count: "exact",
+        head: true,
+      })
+      .eq("date", dashboardDate)
+      .eq("statut", "Remplacé"),
+
+    supabase
       .from("absences")
-      .select("*", {
+      .select("id", {
         count: "exact",
         head: true,
       })
       .gte("date_debut", todayIso)
-      .lte("date_debut", limitIso)
+      .lte("date_debut", limitIso),
 
-  const { count: congesValidesCount } =
-    await supabase
+    supabase
       .from("absences")
-      .select("*", {
+      .select("id", {
         count: "exact",
         head: true,
       })
-      .eq("statut_validation", "Validée")
+      .eq("statut_validation", "Validée"),
 
-  const { count: demandesEnAttenteCount } =
-    await supabase
+    supabase
       .from("absences")
-      .select("*", {
+      .select("id", {
         count: "exact",
         head: true,
       })
-      .neq("statut_validation", "Validée")
+      .neq("statut_validation", "Validée"),
 
-  const { count: structuresCount } =
-    await supabase
+    supabase
       .from("structures")
-      .select("*", {
+      .select("id", {
         count: "exact",
         head: true,
-      })
+      }),
 
-  /*
-   * Absents et remplacements de la journée affichée.
-   */
-  const { data: absentsJour } = await supabase
-    .from("planning_journalier")
-    .select(`
-      id,
-      statut,
-      heure_debut,
-      heure_fin,
-      agents:agent_id (
-        nom
-      ),
-      sites:site_id (
-        nom
-      )
-    `)
-    .eq("date", dashboardDate)
-    .in("statut", [
-      "Absent",
-      "Absence",
-      "Remplacé",
-    ])
-    .order("statut", {
-      ascending: true,
-    })
+    supabase
+      .from("planning_journalier")
+      .select(`
+        id,
+        statut,
+        heure_debut,
+        heure_fin,
+        agents:agent_id (
+          nom
+        ),
+        sites:site_id (
+          nom
+        )
+      `)
+      .eq("date", dashboardDate)
+      .in("statut", [
+        "Absent",
+        "Absence",
+        "Remplacé",
+      ])
+      .order("statut", {
+        ascending: true,
+      }),
 
-  /*
-   * Congés prévus dans les 14 prochains jours.
-   */
-  const { data: alertesAbsences } =
-    await supabase
+    supabase
       .from("absences")
       .select(`
         id,
@@ -162,8 +186,28 @@ export default async function DashboardPage() {
       .lte("date_debut", limitIso)
       .order("date_debut", {
         ascending: true,
-      })
+      }),
+  ])
 
+  const presentsCount = presentsResult.count
+  const absentsCount = absentsResult.count
+  const remplacesCount = remplacesResult.count
+  const congesAVenirCount =
+    congesAVenirResult.count
+  const congesValidesCount =
+    congesValidesResult.count
+  const demandesEnAttenteCount =
+    demandesEnAttenteResult.count
+  const structuresCount =
+    structuresResult.count
+
+  const absentsJour =
+    absentsJourResult.data ?? []
+
+  const alertesAbsences =
+    alertesAbsencesResult.data ?? []
+
+  
   const presents = presentsCount || 0
   const absents = absentsCount || 0
   const remplaces = remplacesCount || 0

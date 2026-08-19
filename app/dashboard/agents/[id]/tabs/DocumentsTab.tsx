@@ -14,6 +14,7 @@ import {
   Upload,
   X,
 } from "lucide-react"
+
 import {
   ChangeEvent,
   FormEvent,
@@ -50,7 +51,9 @@ type DocumentForm = {
   commentaire: string
 }
 
-const STORAGE_BUCKET = "agent-documents"
+const STORAGE_BUCKET = "documents-rh"
+
+const LEGACY_STORAGE_BUCKET = "agent-documents"
 
 const categories = [
   "Contrat",
@@ -76,9 +79,8 @@ const initialForm: DocumentForm = {
 export default function DocumentsTab({
   agentId,
 }: Props) {
-  const [documents, setDocuments] = useState<AgentDocument[]>(
-    []
-  )
+  const [documents, setDocuments] =
+    useState<AgentDocument[]>([])
 
   const [form, setForm] =
     useState<DocumentForm>(initialForm)
@@ -86,63 +88,87 @@ export default function DocumentsTab({
   const [selectedFile, setSelectedFile] =
     useState<File | null>(null)
 
-  const [loading, setLoading] = useState(true)
-  const [uploading, setUploading] = useState(false)
+  const [loading, setLoading] =
+    useState(true)
+
+  const [uploading, setUploading] =
+    useState(false)
+
   const [deletingId, setDeletingId] =
     useState<number | null>(null)
 
-  const [showForm, setShowForm] = useState(false)
-  const [errorMessage, setErrorMessage] = useState("")
+  const [openingId, setOpeningId] =
+    useState<number | null>(null)
+
+  const [showForm, setShowForm] =
+    useState(false)
+
+  const [errorMessage, setErrorMessage] =
+    useState("")
+
   const [successMessage, setSuccessMessage] =
     useState("")
 
-  const loadDocuments = useCallback(async () => {
-    setLoading(true)
-    setErrorMessage("")
+  const loadDocuments =
+    useCallback(async () => {
+      setLoading(true)
+      setErrorMessage("")
 
-    const { data, error } = await supabase
-      .from("agent_documents")
-      .select(`
-        id,
-        agent_id,
-        categorie,
-        nom,
-        fichier_url,
-        date_document,
-        date_expiration,
-        commentaire,
-        created_at
-      `)
-      .eq("agent_id", Number(agentId))
-      .order("created_at", { ascending: false })
+      const { data, error } =
+        await supabase
+          .from("agent_documents")
+          .select(`
+            id,
+            agent_id,
+            categorie,
+            nom,
+            fichier_url,
+            date_document,
+            date_expiration,
+            commentaire,
+            created_at
+          `)
+          .eq(
+            "agent_id",
+            Number(agentId)
+          )
+          .order("created_at", {
+            ascending: false,
+          })
 
-    if (error) {
-      setErrorMessage(error.message)
-      setDocuments([])
+      if (error) {
+        setErrorMessage(error.message)
+        setDocuments([])
+        setLoading(false)
+        return
+      }
+
+      setDocuments(
+        (data || []) as AgentDocument[]
+      )
+
       setLoading(false)
-      return
-    }
-
-    setDocuments(
-      (data || []) as AgentDocument[]
-    )
-
-    setLoading(false)
-  }, [agentId])
+    }, [agentId])
 
   useEffect(() => {
     void loadDocuments()
   }, [loadDocuments])
 
-  const expiringDocuments = useMemo(
-    () =>
-      documents.filter((document) =>
-        isExpiringSoon(document.date_expiration)
-      ).length,
-    [documents]
-  )
+  const expiringDocuments =
+    useMemo(
+      () =>
+        documents.filter(
+          (document) =>
+            isExpiringSoon(
+              document.date_expiration
+            )
+        ).length,
+      [documents]
+    )
 
-  function updateForm<K extends keyof DocumentForm>(
+  function updateForm<
+    K extends keyof DocumentForm
+  >(
     key: K,
     value: DocumentForm[K]
   ) {
@@ -155,11 +181,15 @@ export default function DocumentsTab({
   function handleFileChange(
     event: ChangeEvent<HTMLInputElement>
   ) {
-    const file = event.target.files?.[0] || null
+    const file =
+      event.target.files?.[0] || null
 
     setSelectedFile(file)
 
-    if (file && !form.nom.trim()) {
+    if (
+      file &&
+      !form.nom.trim()
+    ) {
       updateForm(
         "nom",
         removeExtension(file.name)
@@ -192,51 +222,77 @@ export default function DocumentsTab({
     setErrorMessage("")
     setSuccessMessage("")
 
-    const storagePath = createStoragePath(
-      agentId,
-      selectedFile.name
-    )
+    const storagePath =
+      createStoragePath(
+        agentId,
+        selectedFile.name
+      )
 
-    const { error: storageError } =
+    const {
+      error: storageError,
+    } =
       await supabase.storage
         .from(STORAGE_BUCKET)
-        .upload(storagePath, selectedFile, {
-          cacheControl: "3600",
-          upsert: false,
-        })
+        .upload(
+          storagePath,
+          selectedFile,
+          {
+            cacheControl: "3600",
+            upsert: false,
+          }
+        )
 
     if (storageError) {
       setErrorMessage(
         `Impossible d’envoyer le fichier : ${storageError.message}`
       )
+
       setUploading(false)
       return
     }
 
+    /*
+     * On stocke uniquement le chemin Storage.
+     *
+     * Exemple :
+     * 8/1786947244107-certificat.pdf
+     *
+     * On ne stocke plus d'URL publique.
+     */
+    const filePath = storagePath
+
     const {
-      data: publicUrlData,
-    } = supabase.storage
-      .from(STORAGE_BUCKET)
-      .getPublicUrl(storagePath)
+      error: insertError,
+    } = await supabase
+      .from("agent_documents")
+      .insert({
+        agent_id:
+          Number(agentId),
 
-    const fileUrl =
-      publicUrlData.publicUrl
+        categorie:
+          form.categorie,
 
-    const { error: insertError } =
-      await supabase
-        .from("agent_documents")
-        .insert({
-          agent_id: Number(agentId),
-          categorie: form.categorie,
-          nom: form.nom.trim(),
-          fichier_url: fileUrl,
-          date_document:
-            toNullable(form.dateDocument),
-          date_expiration:
-            toNullable(form.dateExpiration),
-          commentaire:
-            toNullable(form.commentaire),
-        })
+        nom:
+          form.nom.trim(),
+
+        fichier_url:
+          filePath,
+
+        date_document:
+          toNullable(
+            form.dateDocument
+          ),
+
+        date_expiration:
+          toNullable(
+            form.dateExpiration
+          ),
+
+        commentaire:
+          toNullable(
+            form.commentaire
+          ),
+      })
 
     if (insertError) {
       await supabase.storage
@@ -252,11 +308,13 @@ export default function DocumentsTab({
     }
 
     await addHistory({
-  agentId,
-  type: "DOCUMENT_AJOUT",
-  description: `Ajout du document « ${form.nom.trim()} »`,
-  utilisateur: "Administrateur",
-})
+      agentId,
+      type: "DOCUMENT_AJOUT",
+      description:
+        `Ajout du document « ${form.nom.trim()} »`,
+      utilisateur:
+        "Administrateur",
+    })
 
     setForm(initialForm)
     setSelectedFile(null)
@@ -267,17 +325,119 @@ export default function DocumentsTab({
     )
 
     await loadDocuments()
+
     setUploading(false)
+  }
+
+  async function openDocument(
+    document: AgentDocument
+  ) {
+    if (!document.fichier_url) {
+      setErrorMessage(
+        "Aucun fichier n’est associé à ce document."
+      )
+      return
+    }
+
+    setOpeningId(document.id)
+    setErrorMessage("")
+    setSuccessMessage("")
+
+    try {
+      const location =
+        getStorageLocation(
+          document.fichier_url,
+          document.agent_id
+        )
+
+      /*
+       * Ancien fichier stocké dans
+       * agent-documents (bucket public).
+       */
+      if (
+        location.bucket ===
+        LEGACY_STORAGE_BUCKET
+      ) {
+        const { data } =
+          supabase.storage
+            .from(
+              LEGACY_STORAGE_BUCKET
+            )
+            .getPublicUrl(
+              location.path
+            )
+
+        if (!data.publicUrl) {
+          throw new Error(
+            "Impossible de générer l’URL du document."
+          )
+        }
+
+        window.open(
+          data.publicUrl,
+          "_blank",
+          "noopener,noreferrer"
+        )
+
+        return
+      }
+
+      /*
+       * Nouveau système :
+       * bucket privé documents-rh.
+       *
+       * L'URL n'est valable que 10 min.
+       */
+      const {
+        data,
+        error,
+      } =
+        await supabase.storage
+          .from(STORAGE_BUCKET)
+          .createSignedUrl(
+            location.path,
+            60 * 10
+          )
+
+      if (error) {
+        throw error
+      }
+
+      if (!data?.signedUrl) {
+        throw new Error(
+          "Impossible de générer l’accès temporaire au document."
+        )
+      }
+
+      window.open(
+        data.signedUrl,
+        "_blank",
+        "noopener,noreferrer"
+      )
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Erreur inconnue."
+
+      setErrorMessage(
+        `Impossible d’ouvrir le document : ${message}`
+      )
+    } finally {
+      setOpeningId(null)
+    }
   }
 
   async function deleteDocument(
     document: AgentDocument
   ) {
-    const confirmed = window.confirm(
-      `Supprimer le document « ${
-        document.nom || "Sans nom"
-      } » ?`
-    )
+    const confirmed =
+      window.confirm(
+        `Supprimer le document « ${
+          document.nom ||
+          "Sans nom"
+        } » ?`
+      )
 
     if (!confirmed) return
 
@@ -285,36 +445,61 @@ export default function DocumentsTab({
     setErrorMessage("")
     setSuccessMessage("")
 
-    const { error: deleteError } =
+    const {
+      error: deleteError,
+    } =
       await supabase
         .from("agent_documents")
         .delete()
-        .eq("id", document.id)
+        .eq(
+          "id",
+          document.id
+        )
 
     if (deleteError) {
-      setErrorMessage(deleteError.message)
+      setErrorMessage(
+        deleteError.message
+      )
+
       setDeletingId(null)
       return
     }
 
     await addHistory({
-  agentId,
-  type: "DOCUMENT_SUPPRESSION",
-  description: `Suppression du document « ${document.nom || "Sans nom"} »`,
-  utilisateur: "Administrateur",
-})
+      agentId,
+      type:
+        "DOCUMENT_SUPPRESSION",
+      description:
+        `Suppression du document « ${
+          document.nom ||
+          "Sans nom"
+        } »`,
+      utilisateur:
+        "Administrateur",
+    })
 
-    const storagePath = extractStoragePath(
-      document.fichier_url
-    )
+    if (document.fichier_url) {
+      const location =
+        getStorageLocation(
+          document.fichier_url,
+          document.agent_id
+        )
 
-    if (storagePath) {
-      const { error: storageDeleteError } =
+      const {
+        error:
+          storageDeleteError,
+      } =
         await supabase.storage
-          .from(STORAGE_BUCKET)
-          .remove([storagePath])
+          .from(
+            location.bucket
+          )
+          .remove([
+            location.path,
+          ])
 
-      if (storageDeleteError) {
+      if (
+        storageDeleteError
+      ) {
         console.error(
           "Suppression Storage impossible :",
           storageDeleteError
@@ -322,10 +507,13 @@ export default function DocumentsTab({
       }
     }
 
-    setDocuments((current) =>
-      current.filter(
-        (item) => item.id !== document.id
-      )
+    setDocuments(
+      (current) =>
+        current.filter(
+          (item) =>
+            item.id !==
+            document.id
+        )
     )
 
     setSuccessMessage(
@@ -354,8 +542,13 @@ export default function DocumentsTab({
 
           <p className="mt-1 text-sm text-slate-500">
             {documents.length} document
-            {documents.length > 1 ? "s" : ""} enregistré
-            {documents.length > 1 ? "s" : ""}
+            {documents.length > 1
+              ? "s"
+              : ""}{" "}
+            enregistré
+            {documents.length > 1
+              ? "s"
+              : ""}
             {expiringDocuments > 0
               ? ` · ${expiringDocuments} à renouveler bientôt`
               : ""}
@@ -365,7 +558,10 @@ export default function DocumentsTab({
         <button
           type="button"
           onClick={() =>
-            setShowForm((current) => !current)
+            setShowForm(
+              (current) =>
+                !current
+            )
           }
           className="inline-flex w-fit items-center gap-2 rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-amber-400"
         >
@@ -395,7 +591,9 @@ export default function DocumentsTab({
 
       {showForm && (
         <form
-          onSubmit={handleSubmit}
+          onSubmit={
+            handleSubmit
+          }
           className="rounded-2xl border border-slate-200 bg-slate-50 p-5"
         >
           <div className="grid gap-5 md:grid-cols-2">
@@ -405,31 +603,49 @@ export default function DocumentsTab({
               </span>
 
               <select
-                value={form.categorie}
-                onChange={(event) =>
+                value={
+                  form.categorie
+                }
+                onChange={(
+                  event
+                ) =>
                   updateForm(
                     "categorie",
-                    event.target.value
+                    event.target
+                      .value
                   )
                 }
                 className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-400/15"
               >
-                {categories.map((category) => (
-                  <option
-                    key={category}
-                    value={category}
-                  >
-                    {category}
-                  </option>
-                ))}
+                {categories.map(
+                  (category) => (
+                    <option
+                      key={
+                        category
+                      }
+                      value={
+                        category
+                      }
+                    >
+                      {
+                        category
+                      }
+                    </option>
+                  )
+                )}
               </select>
             </label>
 
             <FormField
               label="Nom du document"
               value={form.nom}
-              onChange={(value) =>
-                updateForm("nom", value)
+              onChange={(
+                value
+              ) =>
+                updateForm(
+                  "nom",
+                  value
+                )
               }
               placeholder="Ex. Contrat titulaire"
               required
@@ -438,8 +654,12 @@ export default function DocumentsTab({
             <FormField
               label="Date du document"
               type="date"
-              value={form.dateDocument}
-              onChange={(value) =>
+              value={
+                form.dateDocument
+              }
+              onChange={(
+                value
+              ) =>
                 updateForm(
                   "dateDocument",
                   value
@@ -450,8 +670,12 @@ export default function DocumentsTab({
             <FormField
               label="Date d’expiration"
               type="date"
-              value={form.dateExpiration}
-              onChange={(value) =>
+              value={
+                form.dateExpiration
+              }
+              onChange={(
+                value
+              ) =>
                 updateForm(
                   "dateExpiration",
                   value
@@ -465,11 +689,16 @@ export default function DocumentsTab({
               </span>
 
               <textarea
-                value={form.commentaire}
-                onChange={(event) =>
+                value={
+                  form.commentaire
+                }
+                onChange={(
+                  event
+                ) =>
                   updateForm(
                     "commentaire",
-                    event.target.value
+                    event.target
+                      .value
                   )
                 }
                 rows={3}
@@ -487,17 +716,22 @@ export default function DocumentsTab({
                 <input
                   type="file"
                   accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp"
-                  onChange={handleFileChange}
+                  onChange={
+                    handleFileChange
+                  }
                   className="block w-full text-sm text-slate-600 file:mr-4 file:rounded-lg file:border-0 file:bg-slate-900 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-slate-800"
                 />
 
                 <p className="mt-2 text-xs text-slate-500">
-                  PDF, Word ou image.
+                  PDF, Word ou
+                  image.
                 </p>
 
                 {selectedFile && (
                   <p className="mt-3 text-sm font-medium text-slate-700">
-                    {selectedFile.name}
+                    {
+                      selectedFile.name
+                    }
                   </p>
                 )}
               </div>
@@ -507,8 +741,12 @@ export default function DocumentsTab({
           <div className="mt-5 flex flex-wrap justify-end gap-3">
             <button
               type="button"
-              onClick={closeForm}
-              disabled={uploading}
+              onClick={
+                closeForm
+              }
+              disabled={
+                uploading
+              }
               className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
             >
               Annuler
@@ -541,7 +779,8 @@ export default function DocumentsTab({
         <div className="flex min-h-48 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50">
           <Loader2 className="h-6 w-6 animate-spin text-amber-500" />
         </div>
-      ) : documents.length === 0 ? (
+      ) : documents.length ===
+        0 ? (
         <div className="flex min-h-56 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-6 text-center">
           <FileText className="h-10 w-10 text-slate-300" />
 
@@ -550,23 +789,43 @@ export default function DocumentsTab({
           </p>
 
           <p className="mt-1 max-w-md text-sm text-slate-500">
-            Ajoutez le premier document RH de cet agent.
+            Ajoutez le premier
+            document RH de cet
+            agent.
           </p>
         </div>
       ) : (
         <div className="grid gap-4 xl:grid-cols-2">
-          {documents.map((document) => (
-            <DocumentCard
-              key={document.id}
-              document={document}
-              deleting={
-                deletingId === document.id
-              }
-              onDelete={() =>
-                void deleteDocument(document)
-              }
-            />
-          ))}
+          {documents.map(
+            (document) => (
+              <DocumentCard
+                key={
+                  document.id
+                }
+                document={
+                  document
+                }
+                deleting={
+                  deletingId ===
+                  document.id
+                }
+                opening={
+                  openingId ===
+                  document.id
+                }
+                onOpen={() =>
+                  void openDocument(
+                    document
+                  )
+                }
+                onDelete={() =>
+                  void deleteDocument(
+                    document
+                  )
+                }
+              />
+            )
+          )}
         </div>
       )}
     </div>
@@ -576,19 +835,25 @@ export default function DocumentsTab({
 function DocumentCard({
   document,
   deleting,
+  opening,
+  onOpen,
   onDelete,
 }: {
   document: AgentDocument
   deleting: boolean
+  opening: boolean
+  onOpen: () => void
   onDelete: () => void
 }) {
-  const expirationState = getExpirationState(
-    document.date_expiration
-  )
+  const expirationState =
+    getExpirationState(
+      document.date_expiration
+    )
 
-  const Icon = getCategoryIcon(
-    document.categorie
-  )
+  const Icon =
+    getCategoryIcon(
+      document.categorie
+    )
 
   return (
     <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -601,11 +866,13 @@ function DocumentCard({
           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <p className="text-xs font-bold uppercase tracking-wide text-amber-600">
-                {document.categorie || "Document"}
+                {document.categorie ||
+                  "Document"}
               </p>
 
               <h4 className="mt-1 font-bold text-slate-900">
-                {document.nom || "Sans nom"}
+                {document.nom ||
+                  "Sans nom"}
               </h4>
             </div>
 
@@ -613,7 +880,9 @@ function DocumentCard({
               <span
                 className={`inline-flex w-fit rounded-full border px-2.5 py-1 text-xs font-semibold ${expirationState.className}`}
               >
-                {expirationState.label}
+                {
+                  expirationState.label
+                }
               </span>
             )}
           </div>
@@ -621,6 +890,7 @@ function DocumentCard({
           <div className="mt-4 grid gap-2 text-sm text-slate-600 sm:grid-cols-2">
             <p className="flex items-center gap-2">
               <CalendarDays className="h-4 w-4 text-slate-400" />
+
               Document :{" "}
               {formatDate(
                 document.date_document
@@ -629,6 +899,7 @@ function DocumentCard({
 
             <p className="flex items-center gap-2">
               <CalendarDays className="h-4 w-4 text-slate-400" />
+
               Expiration :{" "}
               {document.date_expiration
                 ? formatDate(
@@ -640,21 +911,30 @@ function DocumentCard({
 
           {document.commentaire && (
             <p className="mt-4 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-600">
-              {document.commentaire}
+              {
+                document.commentaire
+              }
             </p>
           )}
 
           <div className="mt-5 flex flex-wrap gap-2">
             {document.fichier_url && (
-              <a
-                href={document.fichier_url}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700"
+              <button
+                type="button"
+                onClick={onOpen}
+                disabled={opening}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700 disabled:cursor-wait disabled:opacity-50"
               >
-                <Download className="h-4 w-4" />
-                Ouvrir
-              </a>
+                {opening ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+
+                {opening
+                  ? "Ouverture…"
+                  : "Ouvrir"}
+              </button>
             )}
 
             <button
@@ -688,7 +968,9 @@ function FormField({
 }: {
   label: string
   value: string
-  onChange: (value: string) => void
+  onChange: (
+    value: string
+  ) => void
   type?: "text" | "date"
   placeholder?: string
   required?: boolean
@@ -697,6 +979,7 @@ function FormField({
     <label>
       <span className="mb-2 block text-sm font-medium text-slate-700">
         {label}
+
         {required && (
           <span className="ml-1 text-red-500">
             *
@@ -708,9 +991,13 @@ function FormField({
         type={type}
         value={value}
         onChange={(event) =>
-          onChange(event.target.value)
+          onChange(
+            event.target.value
+          )
         }
-        placeholder={placeholder}
+        placeholder={
+          placeholder
+        }
         required={required}
         className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-400/15"
       />
@@ -721,27 +1008,42 @@ function FormField({
 function getCategoryIcon(
   category?: string | null
 ) {
-  const normalized = String(category || "")
-    .toLowerCase()
+  const normalized =
+    String(category || "")
+      .toLowerCase()
 
   if (
-    normalized.includes("contrat") ||
-    normalized.includes("avenant")
+    normalized.includes(
+      "contrat"
+    ) ||
+    normalized.includes(
+      "avenant"
+    )
   ) {
     return FileBadge
   }
 
   if (
-    normalized.includes("diplôme") ||
-    normalized.includes("formation") ||
-    normalized.includes("habilitation")
+    normalized.includes(
+      "diplôme"
+    ) ||
+    normalized.includes(
+      "formation"
+    ) ||
+    normalized.includes(
+      "habilitation"
+    )
   ) {
     return FileCheck2
   }
 
   if (
-    normalized.includes("arrêt") ||
-    normalized.includes("médicale")
+    normalized.includes(
+      "arrêt"
+    ) ||
+    normalized.includes(
+      "médicale"
+    )
   ) {
     return FileArchive
   }
@@ -754,23 +1056,41 @@ function getExpirationState(
 ) {
   if (!value) return null
 
-  const expiration = new Date(
-    `${value}T12:00:00`
-  )
+  const expiration =
+    new Date(
+      `${value}T12:00:00`
+    )
 
-  if (Number.isNaN(expiration.getTime())) {
+  if (
+    Number.isNaN(
+      expiration.getTime()
+    )
+  ) {
     return null
   }
 
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
+  const today =
+    new Date()
 
-  const daysRemaining = Math.ceil(
-    (expiration.getTime() - today.getTime()) /
-      86_400_000
+  today.setHours(
+    0,
+    0,
+    0,
+    0
   )
 
-  if (daysRemaining < 0) {
+  const daysRemaining =
+    Math.ceil(
+      (
+        expiration.getTime() -
+        today.getTime()
+      ) /
+        86_400_000
+    )
+
+  if (
+    daysRemaining < 0
+  ) {
     return {
       label: "Expiré",
       className:
@@ -778,11 +1098,16 @@ function getExpirationState(
     }
   }
 
-  if (daysRemaining <= 30) {
+  if (
+    daysRemaining <= 30
+  ) {
     return {
-      label: `${daysRemaining} j restant${
-        daysRemaining > 1 ? "s" : ""
-      }`,
+      label:
+        `${daysRemaining} j restant${
+          daysRemaining > 1
+            ? "s"
+            : ""
+        }`,
       className:
         "border-amber-200 bg-amber-50 text-amber-700",
     }
@@ -798,23 +1123,41 @@ function getExpirationState(
 function isExpiringSoon(
   value?: string | null
 ) {
-  if (!value) return false
-
-  const expiration = new Date(
-    `${value}T12:00:00`
-  )
-
-  if (Number.isNaN(expiration.getTime())) {
+  if (!value) {
     return false
   }
 
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
+  const expiration =
+    new Date(
+      `${value}T12:00:00`
+    )
 
-  const daysRemaining = Math.ceil(
-    (expiration.getTime() - today.getTime()) /
-      86_400_000
+  if (
+    Number.isNaN(
+      expiration.getTime()
+    )
+  ) {
+    return false
+  }
+
+  const today =
+    new Date()
+
+  today.setHours(
+    0,
+    0,
+    0,
+    0
   )
+
+  const daysRemaining =
+    Math.ceil(
+      (
+        expiration.getTime() -
+        today.getTime()
+      ) /
+        86_400_000
+    )
 
   return (
     daysRemaining >= 0 &&
@@ -825,11 +1168,20 @@ function isExpiringSoon(
 function formatDate(
   value?: string | null
 ) {
-  if (!value) return "Non renseignée"
+  if (!value) {
+    return "Non renseignée"
+  }
 
-  const date = new Date(`${value}T12:00:00`)
+  const date =
+    new Date(
+      `${value}T12:00:00`
+    )
 
-  if (Number.isNaN(date.getTime())) {
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
     return value
   }
 
@@ -842,41 +1194,158 @@ function createStoragePath(
   agentId: string,
   originalName: string
 ) {
-  const safeName = originalName
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-zA-Z0-9._-]/g, "-")
-    .toLowerCase()
+  const safeName =
+    originalName
+      .normalize("NFD")
+      .replace(
+        /[\u0300-\u036f]/g,
+        ""
+      )
+      .replace(
+        /[^a-zA-Z0-9._-]/g,
+        "-"
+      )
+      .toLowerCase()
 
   return `${agentId}/${Date.now()}-${safeName}`
 }
 
-function extractStoragePath(
-  publicUrl?: string | null
-) {
-  if (!publicUrl) return null
+/*
+ * Compatibilité ancien / nouveau système.
+ *
+ * Nouveau :
+ *   8/xxx.pdf
+ *
+ * Ancien :
+ *   xxx.pdf
+ *
+ * Ancienne URL publique :
+ *   https://.../storage/v1/object/public/agent-documents/8/xxx.pdf
+ */
+function getStorageLocation(
+  fileValue: string,
+  agentId: number
+): {
+  bucket: string
+  path: string
+} {
+  const value =
+    fileValue.trim()
 
-  const marker = `/storage/v1/object/public/${STORAGE_BUCKET}/`
-  const markerIndex =
-    publicUrl.indexOf(marker)
+  /*
+   * Ancienne URL publique
+   * agent-documents.
+   */
+  const legacyMarker =
+    `/storage/v1/object/public/${LEGACY_STORAGE_BUCKET}/`
 
-  if (markerIndex === -1) {
-    return null
+  const legacyIndex =
+    value.indexOf(
+      legacyMarker
+    )
+
+  if (
+    legacyIndex !== -1
+  ) {
+    return {
+      bucket:
+        LEGACY_STORAGE_BUCKET,
+
+      path:
+        decodeURIComponent(
+          value.slice(
+            legacyIndex +
+              legacyMarker.length
+          )
+        ),
+    }
   }
 
-  return decodeURIComponent(
-    publicUrl.slice(
-      markerIndex + marker.length
+  /*
+   * Ancienne URL publique
+   * documents-rh éventuelle.
+   */
+  const currentPublicMarker =
+    `/storage/v1/object/public/${STORAGE_BUCKET}/`
+
+  const currentPublicIndex =
+    value.indexOf(
+      currentPublicMarker
     )
+
+  if (
+    currentPublicIndex !==
+    -1
+  ) {
+    return {
+      bucket:
+        STORAGE_BUCKET,
+
+      path:
+        decodeURIComponent(
+          value.slice(
+            currentPublicIndex +
+              currentPublicMarker.length
+          )
+        ),
+    }
+  }
+
+  /*
+   * Valeur déjà enregistrée
+   * comme chemin :
+   *
+   * 8/xxx.pdf
+   */
+  if (
+    value.includes("/")
+  ) {
+    return {
+      bucket:
+        STORAGE_BUCKET,
+
+      path:
+        value.replace(
+          /^\/+/,
+          ""
+        ),
+    }
+  }
+
+  /*
+   * Anciennes données où seul
+   * le nom du fichier était
+   * enregistré.
+   *
+   * On reconstruit :
+   * 8/xxx.pdf
+   */
+  return {
+    bucket:
+      STORAGE_BUCKET,
+
+    path:
+      `${agentId}/${value}`,
+  }
+}
+
+function removeExtension(
+  filename: string
+) {
+  return filename.replace(
+    /\.[^/.]+$/,
+    ""
   )
 }
 
-function removeExtension(filename: string) {
-  return filename.replace(/\.[^/.]+$/, "")
-}
+function toNullable(
+  value: string
+) {
+  const trimmedValue =
+    value.trim()
 
-function toNullable(value: string) {
-  const trimmedValue = value.trim()
-
-  return trimmedValue || null
+  return (
+    trimmedValue ||
+    null
+  )
 }

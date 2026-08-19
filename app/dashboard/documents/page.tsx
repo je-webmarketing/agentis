@@ -1,12 +1,49 @@
 import Link from "next/link"
+import { redirect } from "next/navigation"
+
 import DocumentsClient from "@/components/agentis/documents/DocumentsClient"
-import { DocumentService } from "@/lib/services/DocumentService"
+
+import {
+  createClient as createServerSupabaseClient,
+} from "@/lib/supabase/server"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
 
 export default async function DocumentsPage() {
-  const documents = await DocumentService.list()
+  const supabase =
+    await createServerSupabaseClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    redirect("/login")
+  }
+
+  const {
+    data: documents,
+    error,
+  } = await supabase
+    .from("agent_documents")
+    .select(`
+      *,
+      agent:agent_id (
+        id,
+        nom
+      )
+    `)
+    .order("date_document", {
+      ascending: false,
+    })
+
+  if (error) {
+    console.error(
+      "Erreur chargement Documents RH :",
+      error
+    )
+  }
 
   return (
     <main className="min-h-screen bg-[#020817] p-8 text-slate-100">
@@ -18,7 +55,9 @@ export default async function DocumentsPage() {
           ← Retour au Dashboard
         </Link>
 
-        <DocumentsClient initialDocuments={documents} />
+        <DocumentsClient
+          initialDocuments={documents ?? []}
+        />
       </div>
     </main>
   )

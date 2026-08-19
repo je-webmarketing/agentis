@@ -12,8 +12,15 @@ import {
   UserX,
 } from "lucide-react"
 
-import { supabase } from "@/lib/supabase"
+import {
+  createClient as createServerSupabaseClient,
+} from "@/lib/supabase/server"
 import DeleteAgentButton from "./delete-button"
+import { PermissionService } from "@/lib/security/PermissionService"
+import { createSecurityUser } from "@/lib/security/SecurityUserFactory"
+import type {
+  ProfileRecord,
+} from "@/lib/services/ProfileService"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -38,6 +45,67 @@ export default async function AgentsPage({
   searchParams?: Promise<SearchParams>
 }) {
   const params = await searchParams
+
+  const supabase =
+  await createServerSupabaseClient()
+
+  const {
+  data: { user },
+} = await supabase.auth.getUser()
+
+let canCreate = false
+let canDelete = false
+
+if (user) {
+  const {
+    data: profileData,
+    error: profileError,
+  } = await supabase
+    .from("profiles")
+    .select(`
+      id,
+      email,
+      nom,
+      prenom,
+      telephone,
+      fonction,
+      role,
+      agent_id,
+      structure_id,
+      site_id,
+      service_id,
+      actif,
+      avatar_url,
+      derniere_connexion,
+      created_at,
+      updated_at
+    `)
+    .eq("id", user.id)
+    .single()
+
+  if (
+    !profileError &&
+    profileData
+  ) {
+    const profile =
+      profileData as ProfileRecord
+
+    const securityUser =
+      createSecurityUser(profile)
+
+    canCreate =
+      PermissionService.has(
+        securityUser,
+        "agents.create"
+      )
+
+    canDelete =
+      PermissionService.has(
+        securityUser,
+        "agents.delete"
+      )
+  }
+}
 
   const selectedStructure = params?.structure || ""
   const selectedSite = params?.site || ""
@@ -188,13 +256,15 @@ export default async function AgentsPage({
             </p>
           </div>
 
-          <Link
-            href="/dashboard/agents/new"
-            className="inline-flex w-fit items-center gap-2 rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-semibold text-slate-950 shadow-sm transition hover:bg-amber-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
-          >
-            <Plus className="h-4 w-4" />
-            Ajouter un agent
-          </Link>
+          {canCreate && (
+  <Link
+    href="/dashboard/agents/new"
+    className="inline-flex w-fit items-center gap-2 rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-semibold text-slate-950 shadow-sm transition hover:bg-amber-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+  >
+    <Plus className="h-4 w-4" />
+    Ajouter un agent
+  </Link>
+)}
         </header>
 
         {/* Indicateurs */}
@@ -492,9 +562,11 @@ export default async function AgentsPage({
                               Ouvrir
                             </Link>
 
-                            <DeleteAgentButton
-                              id={agent.id}
-                            />
+                            {canDelete && (
+  <DeleteAgentButton
+    id={agent.id}
+  />
+)}
                           </div>
                         </td>
                       </tr>

@@ -43,7 +43,7 @@ const reports: ReportItem[] = [
     description:
       "Afficher les agents présents, absents et les situations nécessitant une action RH.",
     href: "/dashboard/rapports/presences",
-    status: "Disponible bientôt",
+    status: "Disponible",
     icon: UserRoundCheck,
     accentClass:
       "border-blue-200 bg-blue-50 text-blue-700",
@@ -55,7 +55,7 @@ const reports: ReportItem[] = [
     description:
       "Suivre les remplacements enregistrés sur une période et identifier les postes restés vacants.",
     href: "/dashboard/rapports/remplacements",
-    status: "Disponible bientôt",
+    status: "Disponible",
     icon: ShieldCheck,
     accentClass:
       "border-violet-200 bg-violet-50 text-violet-700",
@@ -67,7 +67,7 @@ const reports: ReportItem[] = [
     description:
       "Exporter la liste des agents avec leur service, leur poste, leur site principal et leur statut.",
     href: "/dashboard/rapports/agents",
-    status: "Disponible bientôt",
+    status: "Disponible",
     icon: UsersRound,
     accentClass:
       "border-cyan-200 bg-cyan-50 text-cyan-700",
@@ -79,7 +79,7 @@ const reports: ReportItem[] = [
     description:
       "Lister les documents enregistrés, les échéances proches et les pièces arrivées à expiration.",
     href: "/dashboard/rapports/documents",
-    status: "Disponible bientôt",
+    status: "Disponible",
     icon: FileText,
     accentClass:
       "border-amber-200 bg-amber-50 text-amber-700",
@@ -91,7 +91,7 @@ const reports: ReportItem[] = [
     description:
       "Générer un état annuel ou individuel des compteurs, des heures réalisées et des écarts.",
     href: "/dashboard/rapports/temps",
-    status: "Disponible bientôt",
+    status: "Disponible",
     icon: Clock3,
     accentClass:
       "border-rose-200 bg-rose-50 text-rose-700",

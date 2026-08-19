@@ -1,8 +1,10 @@
+import type { ReactNode } from "react"
+
 type Props = {
   title: string
   description?: string
   badge?: string
-  actions?: React.ReactNode
+  actions?: ReactNode
 }
 
 export default function ReportHeader({
@@ -12,26 +14,22 @@ export default function ReportHeader({
   actions,
 }: Props) {
   return (
-    <section className="rounded-3xl border border-yellow-500/20 bg-gradient-to-br from-[#111827] via-[#07111f] to-[#020817] p-8 shadow-2xl shadow-black/30">
-
+    <section className="rounded-3xl border border-slate-200 bg-gradient-to-r from-white via-slate-50 to-amber-50 p-8 shadow-sm">
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-
         <div>
-
-          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-yellow-400">
+          <p className="text-xs font-bold uppercase tracking-[0.25em] text-amber-600">
             {badge}
           </p>
 
-          <h1 className="mt-3 text-3xl font-bold text-white">
+          <h1 className="mt-3 text-3xl font-bold text-slate-950">
             {title}
           </h1>
 
           {description && (
-            <p className="mt-3 max-w-3xl text-slate-400">
+            <p className="mt-3 max-w-3xl text-base leading-relaxed text-slate-600">
               {description}
             </p>
           )}
-
         </div>
 
         {actions && (
@@ -39,9 +37,7 @@ export default function ReportHeader({
             {actions}
           </div>
         )}
-
       </div>
-
     </section>
   )
 }

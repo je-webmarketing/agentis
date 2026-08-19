@@ -22,6 +22,7 @@ import {
 import AvailabilityEngine from "@/lib/services/AvailabilityEngine"
 import { supabase } from "@/lib/supabase"
 import AbsenceActions from "./actions"
+import AbsenceService from "@/lib/services/AbsenceService"
 
 type AgentOption = {
   id: number
@@ -83,6 +84,9 @@ export default function AbsencesPage() {
     AgentOption[]
   >([])
 
+  const [currentRole, setCurrentRole] =
+  useState<string | null>(null)
+
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [synchronizing, setSynchronizing] = useState(false)
@@ -137,6 +141,77 @@ export default function AbsencesPage() {
     setLoading(true)
     setErrorMessage("")
 
+    const {
+  data: { user },
+  error: userError,
+} = await supabase.auth.getUser()
+
+if (userError || !user) {
+  setErrorMessage(
+    "Impossible d’identifier l’utilisateur connecté."
+  )
+  setLoading(false)
+  return
+}
+
+const {
+  data: profile,
+  error: profileError,
+} = await supabase
+  .from("profiles")
+  .select(`
+    role,
+    actif,
+    structure_id,
+    site_id,
+    service_id,
+    agent_id
+  `)
+  .eq("id", user.id)
+  .single()
+
+if (
+  profileError ||
+  !profile ||
+  profile.actif !== true
+) {
+  setErrorMessage(
+    "Impossible de charger votre profil."
+  )
+  setLoading(false)
+  return
+}
+
+setCurrentRole(profile.role)
+
+let agentsQuery = supabase
+  .from("agents")
+  .select(`
+    id,
+    nom,
+    site_id,
+    service_id,
+    sites:site_id (
+      structure_id
+    )
+  `)
+  .eq("statut", "Actif")
+  .order("nom", { ascending: true })
+
+if (profile.role === "responsable_site") {
+  agentsQuery = agentsQuery.eq(
+    "site_id",
+    profile.site_id
+  )
+}
+
+if (profile.role === "chef_service") {
+  agentsQuery = agentsQuery.eq(
+    "service_id",
+    profile.service_id
+  )
+}
+
     const [absencesResult, agentsResult] =
       await Promise.all([
         supabase
@@ -157,11 +232,7 @@ export default function AbsencesPage() {
             ascending: false,
           }),
 
-        supabase
-          .from("agents")
-          .select("id, nom")
-          .eq("statut", "Actif")
-          .order("nom", { ascending: true }),
+        agentsQuery,
       ])
 
     const firstError =
@@ -212,11 +283,36 @@ export default function AbsencesPage() {
 
     setAbsences(loadedAbsences)
 
-    setAgents(
-      ((agentsResult.data || []) as AgentOption[]).filter(
-        (agent) => Boolean(agent.nom)
-      )
+    const rawAgents = agentsResult.data || []
+
+let scopedAgents = rawAgents
+
+if (profile.role === "responsable_rh") {
+  scopedAgents = rawAgents.filter((agent) => {
+    const site = Array.isArray(agent.sites)
+      ? agent.sites[0]
+      : agent.sites
+
+    return (
+      profile.structure_id != null &&
+      String(site?.structure_id) ===
+        String(profile.structure_id)
     )
+  })
+}
+
+if (profile.role === "agent") {
+  scopedAgents = []
+}
+
+setAgents(
+  scopedAgents
+    .filter((agent) => Boolean(agent.nom))
+    .map((agent) => ({
+      id: agent.id,
+      nom: agent.nom,
+    }))
+)
 
     setLoading(false)
   }, [synchronizeValidatedAbsences])
@@ -224,6 +320,16 @@ export default function AbsencesPage() {
   useEffect(() => {
     void loadData()
   }, [loadData])
+
+  const canCreate =
+  currentRole === "super_admin" ||
+  currentRole === "admin_rh" ||
+  currentRole === "responsable_rh" ||
+  currentRole === "responsable_site" ||
+  currentRole === "chef_service"
+
+const canEdit = canCreate
+const canDelete = canCreate
 
   const filteredAbsences = useMemo(() => {
     const normalizedSearch =
@@ -349,15 +455,17 @@ export default function AbsencesPage() {
         form.commentaire.trim() || null,
     }
 
-    const { error } = await supabase
-      .from("absences")
-      .insert(payload)
-
-    if (error) {
-      setErrorMessage(error.message)
-      setSaving(false)
-      return
-    }
+    try {
+  await AbsenceService.createAbsence(payload)
+} catch (error) {
+  setErrorMessage(
+    error instanceof Error
+      ? error.message
+      : "Impossible de créer l'absence."
+  )
+  setSaving(false)
+  return
+}
 
     if (
       form.statutValidation === "Validée"
@@ -457,14 +565,16 @@ export default function AbsencesPage() {
               Actualiser
             </button>
 
-            <button
-              type="button"
-              onClick={openCreationDialog}
+            {canCreate && (
+  <button
+    type="button"
+    onClick={openCreationDialog}
               className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-amber-400"
             >
-              <Plus className="h-4 w-4" />
-              Ajouter une absence
-            </button>
+    <Plus className="h-4 w-4" />
+    Ajouter une absence
+  </button>
+)}
           </div>
         </header>
 
@@ -660,12 +770,13 @@ export default function AbsencesPage() {
 
                         <td className="px-5 py-4">
                           <AbsenceActions
-                            id={absence.id}
-                            statut={
-                              absence.statut_validation ||
-                              "En attente"
-                            }
-                          />
+  id={absence.id}
+  statut={
+    absence.statut_validation ||
+    "En attente"
+  }
+  canEdit={canEdit}
+/>
                         </td>
                       </tr>
                     )

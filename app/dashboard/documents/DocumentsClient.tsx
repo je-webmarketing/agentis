@@ -1,8 +1,19 @@
 "use client"
 
-import { useState } from "react"
+import {
+  useEffect,
+  useState,
+} from "react"
+
 import AddDocumentDialog from "./AddDocumentDialog"
+
 import { DocumentService } from "@/lib/services/DocumentService"
+import { PermissionService } from "@/lib/security/PermissionService"
+import SecurityUserService from "@/lib/security/SecurityUserService"
+
+import type {
+  SecurityUser,
+} from "@/lib/security/types"
 
 type AgentReference = {
   id: string | number
@@ -35,28 +46,161 @@ type Props = {
   initialDocuments: DocumentRow[]
 }
 
-function formatDate(value?: string | null) {
-  if (!value) return "—"
+function formatDate(
+  value?: string | null
+) {
+  if (!value) {
+    return "—"
+  }
 
-  return new Date(`${value}T12:00:00`).toLocaleDateString("fr-FR")
+  return new Date(
+    `${value}T12:00:00`
+  ).toLocaleDateString("fr-FR")
 }
 
 export default function DocumentsClient({
   initialDocuments,
 }: Props) {
-  const [documents, setDocuments] =
-    useState<DocumentRow[]>(initialDocuments)
+  const [
+    documents,
+    setDocuments,
+  ] = useState<DocumentRow[]>(
+    initialDocuments
+  )
 
-  const [openDialog, setOpenDialog] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [errorMessage, setErrorMessage] = useState("")
+  const [
+    openDialog,
+    setOpenDialog,
+  ] = useState(false)
+
+  const [
+    saving,
+    setSaving,
+  ] = useState(false)
+
+  const [
+    errorMessage,
+    setErrorMessage,
+  ] = useState("")
+
+  const [
+    securityUser,
+    setSecurityUser,
+  ] = useState<SecurityUser | null>(
+    null
+  )
+
+  const [
+    securityLoading,
+    setSecurityLoading,
+  ] = useState(true)
+
+  /*
+   * =======================================================
+   * CHARGEMENT DES PERMISSIONS
+   * =======================================================
+   */
+
+  useEffect(() => {
+    let mounted = true
+
+    async function loadSecurityUser() {
+      try {
+        const user =
+          await SecurityUserService.getCurrent()
+
+        if (mounted) {
+          setSecurityUser(user)
+        }
+      } catch (error) {
+        console.error(
+          "Impossible de charger les permissions :",
+          error
+        )
+
+        if (mounted) {
+          setSecurityUser(null)
+        }
+      } finally {
+        if (mounted) {
+          setSecurityLoading(false)
+        }
+      }
+    }
+
+    void loadSecurityUser()
+
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  /*
+   * =======================================================
+   * DROITS
+   * =======================================================
+   */
+
+  const canCreate =
+    PermissionService.has(
+      securityUser,
+      "documents.create"
+    )
+
+  const canDelete =
+    PermissionService.has(
+      securityUser,
+      "documents.delete"
+    )
+
+   console.log("DOCUMENTS DEBUG", {
+  role: securityUser?.role,
+  permissions: securityUser?.permissions,
+  canCreate,
+  canDelete,
+}) 
+
+  /*
+   * =======================================================
+   * RECHARGEMENT
+   * =======================================================
+   */
 
   async function reloadDocuments() {
-    const data = await DocumentService.list()
-    setDocuments(data as DocumentRow[])
+    try {
+      const data =
+        await DocumentService.list()
+
+      setDocuments(
+        data as DocumentRow[]
+      )
+    } catch (error: unknown) {
+      console.error(error)
+
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Impossible de recharger les documents."
+      )
+    }
   }
 
-  async function handleSave(form: DocumentFormData) {
+  /*
+   * =======================================================
+   * AJOUT
+   * =======================================================
+   */
+
+  async function handleSave(
+    form: DocumentFormData
+  ) {
+    if (!canCreate) {
+      setErrorMessage(
+        "Vous n’êtes pas autorisé à ajouter un document."
+      )
+      return
+    }
+
     if (
       !form.agent_id ||
       !form.categorie ||
@@ -74,22 +218,29 @@ export default function DocumentsClient({
       setSaving(true)
       setErrorMessage("")
 
-      const filePath = await DocumentService.upload(
-        form.fichier,
-        form.agent_id
-      )
+      const filePath =
+        await DocumentService.upload(
+          form.fichier,
+          form.agent_id
+        )
 
       await DocumentService.create({
         agent_id: form.agent_id,
         categorie: form.categorie,
         nom: form.nom,
         fichier_url: filePath,
-        date_document: form.date_document,
-        date_expiration: form.date_expiration || null,
-        commentaire: form.commentaire || null,
+        date_document:
+          form.date_document,
+        date_expiration:
+          form.date_expiration ||
+          null,
+        commentaire:
+          form.commentaire ||
+          null,
       })
 
       await reloadDocuments()
+
       setOpenDialog(false)
     } catch (error: unknown) {
       console.error(error)
@@ -104,20 +255,35 @@ export default function DocumentsClient({
     }
   }
 
-  async function handleOpen(document: DocumentRow) {
+  /*
+   * =======================================================
+   * OUVERTURE
+   * =======================================================
+   */
+
+  async function handleOpen(
+    document: DocumentRow
+  ) {
     if (!document.fichier_url) {
-      setErrorMessage("Aucun fichier n’est associé à ce document.")
+      setErrorMessage(
+        "Aucun fichier n’est associé à ce document."
+      )
       return
     }
 
     try {
       setErrorMessage("")
 
-      const signedUrl = await DocumentService.createSignedUrl(
-        document.fichier_url
-      )
+      const signedUrl =
+        await DocumentService.createSignedUrl(
+          document.fichier_url
+        )
 
-      window.open(signedUrl, "_blank", "noopener,noreferrer")
+      window.open(
+        signedUrl,
+        "_blank",
+        "noopener,noreferrer"
+      )
     } catch (error: unknown) {
       console.error(error)
 
@@ -129,21 +295,47 @@ export default function DocumentsClient({
     }
   }
 
-  async function handleDelete(document: DocumentRow) {
-    const confirmation = window.confirm(
-      `Supprimer définitivement le document « ${document.nom || "Sans nom"} » ?`
-    )
+  /*
+   * =======================================================
+   * SUPPRESSION
+   * =======================================================
+   */
 
-    if (!confirmation) return
+  async function handleDelete(
+    document: DocumentRow
+  ) {
+    if (!canDelete) {
+      setErrorMessage(
+        "Vous n’êtes pas autorisé à supprimer ce document."
+      )
+      return
+    }
+
+    const confirmation =
+      window.confirm(
+        `Supprimer définitivement le document « ${
+          document.nom ||
+          "Sans nom"
+        } » ?`
+      )
+
+    if (!confirmation) {
+      return
+    }
 
     try {
       setErrorMessage("")
 
       if (document.fichier_url) {
-        await DocumentService.deleteFile(document.fichier_url)
+        await DocumentService.deleteFile(
+          document.fichier_url
+        )
       }
 
-      await DocumentService.delete(document.id)
+      await DocumentService.delete(
+        document.id
+      )
+
       await reloadDocuments()
     } catch (error: unknown) {
       console.error(error)
@@ -155,6 +347,12 @@ export default function DocumentsClient({
       )
     }
   }
+
+  /*
+   * =======================================================
+   * AFFICHAGE
+   * =======================================================
+   */
 
   return (
     <>
@@ -169,20 +367,24 @@ export default function DocumentsClient({
           </h1>
 
           <p className="mt-2 text-slate-400">
-            Gestion documentaire sécurisée des agents.
+            Gestion documentaire sécurisée
+            des agents.
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => {
-            setErrorMessage("")
-            setOpenDialog(true)
-          }}
-          className="rounded-xl bg-yellow-500 px-5 py-3 font-semibold text-slate-950 transition hover:bg-yellow-400"
-        >
-          + Nouveau document
-        </button>
+        {!securityLoading &&
+          canCreate && (
+            <button
+              type="button"
+              onClick={() => {
+                setErrorMessage("")
+                setOpenDialog(true)
+              }}
+              className="rounded-xl bg-yellow-500 px-5 py-3 font-semibold text-slate-950 transition hover:bg-yellow-400"
+            >
+              + Nouveau document
+            </button>
+          )}
       </div>
 
       {errorMessage && (
@@ -193,95 +395,140 @@ export default function DocumentsClient({
 
       <div className="overflow-hidden rounded-3xl border border-slate-800 bg-[#0f172a]">
         <div className="overflow-x-auto">
-          <table className="min-w-[1000px] w-full">
+          <table className="w-full min-w-[1000px]">
             <thead className="bg-[#111827] text-sm text-slate-300">
               <tr>
-                <th className="p-4 text-left">Agent</th>
-                <th className="p-4 text-left">Catégorie</th>
-                <th className="p-4 text-left">Document</th>
-                <th className="p-4 text-left">Date</th>
-                <th className="p-4 text-left">Expiration</th>
-                <th className="p-4 text-center">Actions</th>
+                <th className="p-4 text-left">
+                  Agent
+                </th>
+
+                <th className="p-4 text-left">
+                  Catégorie
+                </th>
+
+                <th className="p-4 text-left">
+                  Document
+                </th>
+
+                <th className="p-4 text-left">
+                  Date
+                </th>
+
+                <th className="p-4 text-left">
+                  Expiration
+                </th>
+
+                <th className="p-4 text-center">
+                  Actions
+                </th>
               </tr>
             </thead>
 
             <tbody>
-              {documents.length === 0 ? (
+              {documents.length ===
+              0 ? (
                 <tr>
                   <td
                     colSpan={6}
                     className="p-10 text-center text-slate-400"
                   >
-                    Aucun document enregistré.
+                    Aucun document
+                    enregistré.
                   </td>
                 </tr>
               ) : (
-                documents.map((document) => (
-                  <tr
-                    key={document.id}
-                    className="border-t border-slate-800 text-sm transition hover:bg-white/[0.02]"
-                  >
-                    <td className="p-4 font-medium text-slate-100">
-                      {document.agent?.nom ||
-                        "Agent non renseigné"}
-                    </td>
+                documents.map(
+                  (document) => (
+                    <tr
+                      key={
+                        document.id
+                      }
+                      className="border-t border-slate-800 text-sm transition hover:bg-white/[0.02]"
+                    >
+                      <td className="p-4 font-medium text-slate-100">
+                        {document.agent
+                          ?.nom ||
+                          "Agent non renseigné"}
+                      </td>
 
-                    <td className="p-4">
-                      <span className="rounded-lg border border-cyan-500/25 bg-cyan-500/10 px-3 py-1 text-xs text-cyan-300">
-                        {document.categorie || "Autre"}
-                      </span>
-                    </td>
+                      <td className="p-4">
+                        <span className="rounded-lg border border-cyan-500/25 bg-cyan-500/10 px-3 py-1 text-xs text-cyan-300">
+                          {document.categorie ||
+                            "Autre"}
+                        </span>
+                      </td>
 
-                    <td className="p-4 text-slate-300">
-                      {document.nom || "Sans nom"}
-                    </td>
+                      <td className="p-4 text-slate-300">
+                        {document.nom ||
+                          "Sans nom"}
+                      </td>
 
-                    <td className="p-4 text-slate-400">
-                      {formatDate(document.date_document)}
-                    </td>
+                      <td className="p-4 text-slate-400">
+                        {formatDate(
+                          document.date_document
+                        )}
+                      </td>
 
-                    <td className="p-4 text-slate-400">
-                      {formatDate(document.date_expiration)}
-                    </td>
+                      <td className="p-4 text-slate-400">
+                        {formatDate(
+                          document.date_expiration
+                        )}
+                      </td>
 
-                    <td className="p-4">
-                      <div className="flex justify-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleOpen(document)}
-                          className="rounded-lg border border-slate-700 px-3 py-2 text-slate-300 transition hover:border-cyan-500/50 hover:text-cyan-300"
-                        >
-                          Voir
-                        </button>
+                      <td className="p-4">
+                        <div className="flex justify-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void handleOpen(
+                                document
+                              )
+                            }
+                            className="rounded-lg border border-slate-700 px-3 py-2 text-slate-300 transition hover:border-cyan-500/50 hover:text-cyan-300"
+                          >
+                            Voir
+                          </button>
 
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(document)}
-                          className="rounded-lg border border-red-500/40 px-3 py-2 text-red-300 transition hover:bg-red-500/10"
-                        >
-                          Supprimer
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                          {canDelete && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                void handleDelete(
+                                  document
+                                )
+                              }
+                              className="rounded-lg border border-red-500/40 px-3 py-2 text-red-300 transition hover:bg-red-500/10"
+                            >
+                              Supprimer
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                )
               )}
             </tbody>
           </table>
         </div>
       </div>
 
-      <AddDocumentDialog
-        open={openDialog}
-        onClose={() => {
-          if (!saving) setOpenDialog(false)
-        }}
-        onSave={handleSave}
-      />
+      {canCreate && (
+        <AddDocumentDialog
+          open={openDialog}
+          onClose={() => {
+            if (!saving) {
+              setOpenDialog(false)
+            }
+          }}
+          onSave={handleSave}
+        />
+      )}
 
       {saving && (
         <div className="fixed bottom-6 right-6 z-[60] rounded-xl border border-yellow-500/30 bg-[#111827] px-5 py-3 text-sm text-yellow-300 shadow-2xl">
-          Téléversement et enregistrement…
+          Téléversement et
+          enregistrement…
         </div>
       )}
     </>

@@ -192,6 +192,23 @@ export default function VisitesMedicalesTab({
       return
     }
 
+    if (!form.prochaineVisite) {
+  setErrorMessage(
+    "Renseignez la prochaine visite médicale afin qu’AGENTIS puisse anticiper la prochaine échéance."
+  )
+  return
+}
+
+if (
+  form.prochaineVisite <=
+  form.dateVisite
+) {
+  setErrorMessage(
+    "La prochaine visite médicale doit être postérieure à la visite réalisée."
+  )
+  return
+}
+
     setSaving(true)
     setErrorMessage("")
     setSuccessMessage("")

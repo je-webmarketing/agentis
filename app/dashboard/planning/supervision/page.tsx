@@ -1,8 +1,8 @@
 "use client"
 
 import Link from "next/link"
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
 import {
   Maximize2,
   Minimize2,
@@ -13,6 +13,17 @@ import {
 import { supabase } from "@/lib/supabase"
 import { planningSlots } from "@/lib/planning/slots"
 import PlanningRequirementsService from "@/lib/services/PlanningRequirementsService"
+import { AgentService } from "@/lib/services/AgentService"
+import { PlanningService } from "@/lib/services/PlanningService"
+import ReplacementEngine, {
+  type ReplacementCandidate,
+  type ReplacementRecommendation,
+} from "@/lib/planning/ReplacementEngine"
+import AgentQuickPanel, {
+  type AgentQuickPanelData,
+} from "@/components/agentis/planning/AgentQuickPanel"
+import MoveAssignmentDialog from "@/components/agentis/planning/dialogs/MoveAssignmentDialog"
+import SupervisionSummary from "@/components/agentis/planning/supervision/SupervisionSummary"
 
 type SiteRow = {
   id: string | number
@@ -38,9 +49,20 @@ type PlanningRow = {
 
 type CompactAgent = {
   id: string | number
+  agentId: string | number | null
   name: string
   status: "present" | "replacement" | "absence"
 }
+
+type VacancyContext = {
+  vacancyId: string | number
+  siteId: string | number
+  slotKey: string
+  start: string | null
+  end: string | null
+}
+
+type GenericRow = Record<string, unknown>
 
 type SlotSummary = {
   key: string
@@ -107,6 +129,136 @@ function getShortName(name: string) {
     .toUpperCase()
 }
 
+function getStringValue(
+  row: GenericRow | null | undefined,
+  keys: string[]
+) {
+  if (!row) return null
+
+  for (const key of keys) {
+    const value = row[key]
+
+    if (
+      typeof value === "string" &&
+      value.trim().length > 0
+    ) {
+      return value.trim()
+    }
+  }
+
+  return null
+}
+
+function getDateValue(
+  row: GenericRow | null | undefined,
+  keys: string[]
+) {
+  const value = getStringValue(row, keys)
+
+  if (!value) return null
+
+  const match = value.match(/^\d{4}-\d{2}-\d{2}/)
+
+  return match ? match[0] : null
+}
+
+function getRelationId(value: unknown) {
+  if (
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value)
+  ) {
+    const id = (value as GenericRow).id
+
+    if (
+      typeof id === "string" ||
+      typeof id === "number"
+    ) {
+      return id
+    }
+  }
+
+  if (Array.isArray(value)) {
+    const first = value[0]
+
+    if (
+      first &&
+      typeof first === "object"
+    ) {
+      const id = (first as GenericRow).id
+
+      if (
+        typeof id === "string" ||
+        typeof id === "number"
+      ) {
+        return id
+      }
+    }
+  }
+
+  return null
+}
+
+function isActiveContract(
+  row: GenericRow,
+  date: string
+) {
+  const start = getDateValue(row, [
+    "date_debut",
+    "date_debut_contrat",
+    "debut_contrat",
+  ])
+
+  const end = getDateValue(row, [
+    "date_fin",
+    "date_fin_contrat",
+    "fin_contrat",
+    "date_echeance",
+  ])
+
+  return (
+    (!start || start <= date) &&
+    (!end || end >= date)
+  )
+}
+
+function isValidMedicalVisit(
+  row: GenericRow,
+  date: string
+) {
+  const status =
+    getStringValue(row, [
+      "aptitude",
+      "statut",
+      "resultat",
+    ])?.toLowerCase() || ""
+
+  if (status.includes("inapte")) {
+    return false
+  }
+
+  const expiry = getDateValue(row, [
+    "prochaine_visite",
+    "date_prochaine_visite",
+    "date_echeance",
+  ])
+
+  return !expiry || expiry >= date
+}
+
+function isValidHabilitation(
+  row: GenericRow,
+  date: string
+) {
+  const expiry = getDateValue(row, [
+    "date_expiration",
+    "date_echeance",
+    "expiration",
+  ])
+
+  return !expiry || expiry >= date
+}
+
 function getTodayIso() {
   return new Date().toISOString().slice(0, 10)
 }
@@ -154,14 +306,11 @@ function getErrorMessage(error: unknown) {
   return "Une erreur inconnue est survenue."
 }
 
-function PlanningSupervisionContent() {
+export default function PlanningSupervisionPage() {
   const router = useRouter()
-  const searchParams = useSearchParams()
 
-  const dateFromUrl = searchParams.get("date") || getTodayIso()
-
-  const [selectedDate, setSelectedDate] = useState(dateFromUrl)
-  const [dateInput, setDateInput] = useState(dateFromUrl)
+  const [selectedDate, setSelectedDate] = useState(getTodayIso())
+  const [dateInput, setDateInput] = useState(getTodayIso())
 
   const [structures, setStructures] = useState<StructureSummary[]>([])
   const [loading, setLoading] = useState(true)
@@ -170,11 +319,52 @@ function PlanningSupervisionContent() {
   const [filter, setFilter] = useState<FilterValue>("all")
   const [search, setSearch] = useState("")
   const [wallMode, setWallMode] = useState(false)
+  const [
+    selectedQuickAgent,
+    setSelectedQuickAgent,
+  ] = useState<AgentQuickPanelData | null>(null)
+
+  const [
+    moveAssignmentId,
+    setMoveAssignmentId,
+  ] = useState<string | number | null>(null)
+
+  const [
+    vacancyContext,
+    setVacancyContext,
+  ] = useState<VacancyContext | null>(null)
+
+  const [
+    replacementRecommendations,
+    setReplacementRecommendations,
+  ] = useState<ReplacementRecommendation[]>([])
+
+  const [
+    replacementLoading,
+    setReplacementLoading,
+  ] = useState(false)
+
+  const [
+    replacementError,
+    setReplacementError,
+  ] = useState<string | null>(null)
+
+  const [
+    creatingVacancyKey,
+    setCreatingVacancyKey,
+  ] = useState<string | null>(null)
 
   useEffect(() => {
+    const params = new URLSearchParams(
+      window.location.search
+    )
+
+    const dateFromUrl =
+      params.get("date") || getTodayIso()
+
     setSelectedDate(dateFromUrl)
     setDateInput(dateFromUrl)
-  }, [dateFromUrl])
+  }, [])
 
   const loadSupervision = useCallback(async (date: string) => {
     try {
@@ -238,6 +428,7 @@ function PlanningSupervisionContent() {
             if (isVacancy(row)) {
               return {
                 id: row.id,
+                agentId: null,
                 name: "Vacant",
                 status: "absence",
               }
@@ -255,6 +446,7 @@ function PlanningSupervisionContent() {
 
             return {
               id: row.id,
+              agentId: row.agent_id,
               name,
               status:
                 status === "remplacé" ||
@@ -444,7 +636,7 @@ function PlanningSupervisionContent() {
     if (!dateInput) return
 
     const params = new URLSearchParams(
-      searchParams.toString()
+      window.location.search
     )
 
     params.set("date", dateInput)
@@ -452,6 +644,505 @@ function PlanningSupervisionContent() {
     router.push(
       `/dashboard/planning/supervision?${params.toString()}`
     )
+  }
+
+  async function openQuickPanel(
+    agent: CompactAgent,
+    structure: StructureSummary,
+    slot: SlotSummary
+  ) {
+    const slotConfig = planningSlots.find(
+      (item) => item.key === slot.key
+    )
+
+    const basePanel: AgentQuickPanelData = {
+      assignmentId: agent.id,
+      agentId: agent.agentId,
+      name: agent.name,
+      status: agent.status,
+      structureName: structure.name,
+      slotLabel: slot.label,
+      slotTime: slot.time,
+      selectedDate,
+      position:
+        agent.status === "absence"
+          ? "À pourvoir"
+          : "Chargement…",
+      contractLabel:
+        agent.status === "absence"
+          ? "Non applicable"
+          : "Chargement…",
+      medicalVisitLabel:
+        agent.status === "absence"
+          ? "Non applicable"
+          : "Chargement…",
+      formationLabel:
+        agent.status === "absence"
+          ? "Non applicable"
+          : "Chargement…",
+      habilitationLabel:
+        agent.status === "absence"
+          ? "Non applicable"
+          : "Chargement…",
+    }
+
+    setSelectedQuickAgent(basePanel)
+    setReplacementRecommendations([])
+    setReplacementError(null)
+
+    if (agent.status === "absence") {
+      const context: VacancyContext = {
+        vacancyId: agent.id,
+        siteId: structure.id,
+        slotKey: slot.key,
+        start: slotConfig?.start ?? null,
+        end: slotConfig?.end ?? null,
+      }
+
+      setVacancyContext(context)
+      void loadReplacementRecommendations(context)
+      return
+    }
+
+    setVacancyContext(null)
+
+    if (
+      agent.agentId === null ||
+      agent.agentId === undefined
+    ) {
+      return
+    }
+
+    try {
+      const profile =
+        await AgentService.getQuickProfile(
+          agent.agentId,
+          selectedDate
+        )
+
+      setSelectedQuickAgent((current) => {
+        if (
+          !current ||
+          String(current.assignmentId) !==
+            String(agent.id)
+        ) {
+          return current
+        }
+
+        return {
+          ...current,
+          name: profile.name,
+          position: profile.positionLabel,
+          contractLabel: profile.contractLabel,
+          medicalVisitLabel:
+            profile.medicalVisitLabel,
+          formationLabel:
+            profile.formationLabel,
+          habilitationLabel:
+            profile.habilitationLabel,
+        }
+      })
+    } catch (error: unknown) {
+      console.error(
+        "Impossible de charger la fiche rapide :",
+        error
+      )
+
+      setSelectedQuickAgent((current) => {
+        if (
+          !current ||
+          String(current.assignmentId) !==
+            String(agent.id)
+        ) {
+          return current
+        }
+
+        return {
+          ...current,
+          position:
+            current.position === "Chargement…"
+              ? "Non renseigné"
+              : current.position,
+          contractLabel:
+            "Impossible de charger le contrat",
+          medicalVisitLabel:
+            "Impossible de charger la visite médicale",
+          formationLabel:
+            "Impossible de charger les formations",
+          habilitationLabel:
+            "Impossible de charger les habilitations",
+        }
+      })
+    }
+  }
+
+  async function loadReplacementRecommendations(
+    context: VacancyContext
+  ) {
+    try {
+      setReplacementLoading(true)
+      setReplacementError(null)
+      setReplacementRecommendations([])
+
+      const [
+        agentsData,
+        planningData,
+        absencesResult,
+        contractsResult,
+        visitsResult,
+        formationsResult,
+        habilitationsResult,
+      ] = await Promise.all([
+        AgentService.list(),
+        PlanningService.getDay(selectedDate),
+
+        supabase
+          .from("absences")
+          .select("*")
+          .lte("date_debut", selectedDate)
+          .gte("date_fin", selectedDate)
+          .neq("statut_validation", "Refusée"),
+
+        supabase
+          .from("agent_contrats")
+          .select("*"),
+
+        supabase
+          .from("agent_visites_medicales")
+          .select("*"),
+
+        supabase
+          .from("agent_formations")
+          .select("*"),
+
+        supabase
+          .from("agent_habilitations")
+          .select("*"),
+      ])
+
+      const firstError =
+        absencesResult.error ||
+        contractsResult.error ||
+        visitsResult.error ||
+        formationsResult.error ||
+        habilitationsResult.error
+
+      if (firstError) {
+        throw firstError
+      }
+
+      const agents = Array.isArray(agentsData)
+        ? (agentsData as GenericRow[])
+        : []
+
+      const dayRows = Array.isArray(planningData)
+        ? (planningData as GenericRow[])
+        : []
+
+      const absences =
+        (absencesResult.data || []) as GenericRow[]
+
+      const contracts =
+        (contractsResult.data || []) as GenericRow[]
+
+      const visits =
+        (visitsResult.data || []) as GenericRow[]
+
+      const formations =
+        (formationsResult.data || []) as GenericRow[]
+
+      const habilitations =
+        (habilitationsResult.data || []) as GenericRow[]
+
+      const slotConfig = planningSlots.find(
+        (slot) => slot.key === context.slotKey
+      )
+
+      const candidates: ReplacementCandidate[] =
+        agents.map((agent) => {
+          const agentId =
+            agent.id as string | number
+
+          const name =
+            getStringValue(agent, ["nom"]) ||
+            `Agent ${agentId}`
+
+          const hasAbsence = absences.some(
+            (absence) =>
+              String(absence.agent_id) ===
+              String(agentId)
+          )
+
+          const hasPlanningConflict =
+            dayRows.some((row) => {
+              if (
+                String(row.agent_id) !==
+                String(agentId)
+              ) {
+                return false
+              }
+
+              const rowStart =
+                getStringValue(row, [
+                  "heure_debut",
+                ])
+
+              return (
+                rowStart !== null &&
+                rowStart ===
+                  (slotConfig?.start ?? null)
+              )
+            })
+
+          const agentContracts = contracts.filter(
+            (contract) =>
+              String(contract.agent_id) ===
+              String(agentId)
+          )
+
+          const agentVisits = visits.filter(
+            (visit) =>
+              String(visit.agent_id) ===
+              String(agentId)
+          )
+
+          const agentFormations = formations.filter(
+            (formation) =>
+              String(formation.agent_id) ===
+              String(agentId)
+          )
+
+          const agentHabilitations =
+            habilitations.filter(
+              (habilitation) =>
+                String(habilitation.agent_id) ===
+                String(agentId)
+            )
+
+          return {
+            agentId,
+            name,
+            siteId:
+              (agent.site_id as
+                | string
+                | number
+                | null
+                | undefined) ??
+              getRelationId(agent.site),
+            positionId:
+              (agent.poste_id as
+                | string
+                | number
+                | null
+                | undefined) ??
+              getRelationId(agent.poste),
+            serviceId:
+              (agent.service_id as
+                | string
+                | number
+                | null
+                | undefined) ??
+              getRelationId(agent.service_ref),
+
+            available:
+              !hasAbsence &&
+              !hasPlanningConflict,
+
+            hasAbsence,
+            hasPlanningConflict,
+
+            hasValidHabilitation:
+              agentHabilitations.some(
+                (habilitation) =>
+                  isValidHabilitation(
+                    habilitation,
+                    selectedDate
+                  )
+              ),
+
+            hasRequiredFormation:
+              agentFormations.length > 0,
+
+            hasValidMedicalVisit:
+              agentVisits.some((visit) =>
+                isValidMedicalVisit(
+                  visit,
+                  selectedDate
+                )
+              ),
+
+            hasActiveContract:
+              agentContracts.some((contract) =>
+                isActiveContract(
+                  contract,
+                  selectedDate
+                )
+              ),
+          }
+        })
+
+      const recommendations =
+        ReplacementEngine.rankCandidates(
+          candidates,
+          {
+            date: selectedDate,
+            siteId: context.siteId,
+            slotKey: context.slotKey,
+            requiresMedicalVisit: false,
+            requiresActiveContract: false,
+          },
+          {
+            minimumScore: 0,
+          }
+        )
+          .filter(
+            (recommendation) =>
+              recommendation.eligible
+          )
+          .slice(0, 10)
+
+      setReplacementRecommendations(
+        recommendations
+      )
+    } catch (error: unknown) {
+      setReplacementRecommendations([])
+      setReplacementError(
+        getErrorMessage(error) ||
+          "Impossible de calculer les recommandations."
+      )
+    } finally {
+      setReplacementLoading(false)
+    }
+  }
+
+  async function chooseReplacement(
+    recommendation: ReplacementRecommendation
+  ) {
+    if (!vacancyContext) {
+      setReplacementError(
+        "Le poste vacant est introuvable."
+      )
+      return
+    }
+
+    try {
+      setReplacementLoading(true)
+      setReplacementError(null)
+
+      await PlanningService.replaceVacancy({
+        vacancyId: vacancyContext.vacancyId,
+        date: selectedDate,
+        agentId: recommendation.agentId,
+        siteId: vacancyContext.siteId,
+        service: vacancyContext.slotKey,
+        start: vacancyContext.start,
+        end: vacancyContext.end,
+        commentaire:
+          `Remplacement proposé par AGENTIS · score ${recommendation.score} %`,
+      })
+
+      setSelectedQuickAgent(null)
+      setVacancyContext(null)
+      setReplacementRecommendations([])
+
+      await loadSupervision(selectedDate)
+    } catch (error: unknown) {
+      setReplacementError(
+        getErrorMessage(error) ||
+          "Impossible d’affecter ce remplaçant."
+      )
+    } finally {
+      setReplacementLoading(false)
+    }
+  }
+
+  async function openMissingSlot(
+    structure: StructureSummary,
+    slot: SlotSummary
+  ) {
+    const vacancyKey = `${structure.id}:${slot.key}`
+
+    try {
+      setCreatingVacancyKey(vacancyKey)
+      setReplacementError(null)
+
+      const existingVacancy = slot.agents.find(
+        (agent) => agent.status === "absence"
+      )
+
+      if (existingVacancy) {
+        await openQuickPanel(
+          existingVacancy,
+          structure,
+          slot
+        )
+        return
+      }
+
+      const slotConfig = planningSlots.find(
+        (item) => item.key === slot.key
+      )
+
+      const { data, error } = await supabase
+        .from("planning_journalier")
+        .insert({
+          date: selectedDate,
+          agent_id: null,
+          site_id: structure.id,
+          service: slot.key,
+          heure_debut: slotConfig?.start ?? null,
+          heure_fin: slotConfig?.end ?? null,
+          statut: "Absent",
+          commentaire:
+            "Poste vacant créé depuis la supervision",
+          est_poste_vacant: true,
+        })
+        .select("id")
+        .single()
+
+      if (error) {
+        throw error
+      }
+
+      const vacancyAgent: CompactAgent = {
+        id: data.id,
+        agentId: null,
+        name: "Vacant",
+        status: "absence",
+      }
+
+      await loadSupervision(selectedDate)
+
+      await openQuickPanel(
+        vacancyAgent,
+        structure,
+        slot
+      )
+    } catch (error: unknown) {
+      setReplacementError(
+        getErrorMessage(error) ||
+          "Impossible de créer ou d’ouvrir le poste vacant."
+      )
+    } finally {
+      setCreatingVacancyKey(null)
+    }
+  }
+
+  function openDetailedPlanning(
+    agent: AgentQuickPanelData
+  ) {
+    const agentQuery =
+      agent.status === "absence"
+        ? ""
+        : `&agent=${encodeURIComponent(agent.name)}`
+
+    router.push(
+      `/dashboard/planning?date=${selectedDate}&site=${encodeURIComponent(
+        agent.structureName
+      )}${agentQuery}`
+    )
+
+    setSelectedQuickAgent(null)
   }
 
   return (
@@ -556,54 +1247,31 @@ function PlanningSupervisionContent() {
           </section>
         ) : (
           <>
-            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-              <SummaryCard
-                label="Affichées"
-                value={visibleStructures.length}
-                tone="slate"
-              />
+            <SupervisionSummary
+  displayedStructures={visibleStructures.length}
+  coveredStructures={
+    visibleStructures.filter(
+      (structure) => structure.status === "ok"
+    ).length
+  }
+  warningStructures={
+    visibleStructures.filter(
+      (structure) => structure.status === "warning"
+    ).length
+  }
+  criticalStructures={
+    visibleStructures.filter(
+      (structure) => structure.status === "danger"
+    ).length
+  }
+  uncoveredPosts={totals.missing}
+  expectedPosts={totals.expected}
+  coveredPosts={totals.covered}
+  coverage={totals.coverage}
+  selectedDate={selectedDate}
+/>
 
-              <SummaryCard
-                label="Couvertes"
-                value={
-                  visibleStructures.filter(
-                    (structure) =>
-                      structure.status === "ok"
-                  ).length
-                }
-                tone="emerald"
-              />
-
-              <SummaryCard
-                label="À surveiller"
-                value={
-                  visibleStructures.filter(
-                    (structure) =>
-                      structure.status === "warning"
-                  ).length
-                }
-                tone="amber"
-              />
-
-              <SummaryCard
-                label="Critiques"
-                value={
-                  visibleStructures.filter(
-                    (structure) =>
-                      structure.status === "danger"
-                  ).length
-                }
-                tone="red"
-              />
-
-              <SummaryCard
-                label="Couverture"
-                value={`${totals.coverage} %`}
-                tone="blue"
-              />
-            </section>
-
-            <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                 <div className="flex flex-wrap gap-2">
                   <FilterButton
@@ -650,42 +1318,6 @@ function PlanningSupervisionContent() {
               </div>
             </section>
 
-            <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-xl font-bold text-slate-900">
-                    Supervision du {selectedDate}
-                  </h2>
-
-                  <p className="mt-1 text-sm text-slate-600">
-                    {totals.missing} poste
-                    {totals.missing > 1 ? "s" : ""} restant
-                    {totals.missing > 1 ? "s" : ""} à couvrir
-                    dans la sélection.
-                  </p>
-                </div>
-
-                <div className="text-sm font-semibold text-slate-700">
-                  {totals.covered} / {totals.expected} besoins couverts
-                </div>
-              </div>
-
-              <div className="mt-4 h-3 overflow-hidden rounded-full bg-slate-200">
-                <div
-                  className={`h-full rounded-full transition-all duration-300 ${
-                    totals.coverage >= 90
-                      ? "bg-emerald-500"
-                      : totals.coverage >= 70
-                        ? "bg-amber-500"
-                        : "bg-red-500"
-                  }`}
-                  style={{
-                    width: `${totals.coverage}%`,
-                  }}
-                />
-              </div>
-            </section>
-
             {visibleStructures.length === 0 ? (
               <section className="rounded-3xl border border-dashed border-slate-300 bg-white p-12 text-center shadow-sm">
                 <SlidersHorizontal className="mx-auto h-10 w-10 text-slate-400" />
@@ -712,6 +1344,9 @@ function PlanningSupervisionContent() {
                       key={structure.id}
                       structure={structure}
                       selectedDate={selectedDate}
+                      onOpenQuickPanel={openQuickPanel}
+                      onOpenMissingSlot={openMissingSlot}
+                      creatingVacancyKey={creatingVacancyKey}
                     />
                   )
                 )}
@@ -720,24 +1355,62 @@ function PlanningSupervisionContent() {
           </>
         )}
       </div>
+
+      <AgentQuickPanel
+        open={selectedQuickAgent !== null}
+        agent={selectedQuickAgent}
+        onClose={() => {
+          setSelectedQuickAgent(null)
+          setVacancyContext(null)
+          setReplacementRecommendations([])
+          setReplacementError(null)
+        }}
+        onEditAssignment={() => {
+          if (!selectedQuickAgent) return
+          openDetailedPlanning(selectedQuickAgent)
+        }}
+        onMoveAssignment={(assignmentId) => {
+          if (
+            selectedQuickAgent?.status === "absence"
+          ) {
+            openDetailedPlanning(
+              selectedQuickAgent
+            )
+            return
+          }
+
+          setMoveAssignmentId(assignmentId)
+          setSelectedQuickAgent(null)
+        }}
+        onOpenAgent={(agentId) => {
+          router.push(`/dashboard/agents/${agentId}`)
+          setSelectedQuickAgent(null)
+        }}
+        onOpenHistory={(agentId) => {
+          router.push(
+            `/dashboard/agents/${agentId}`
+          )
+          setSelectedQuickAgent(null)
+        }}
+        replacementRecommendations={
+          replacementRecommendations
+        }
+        replacementLoading={replacementLoading}
+        replacementError={replacementError}
+        onChooseReplacement={chooseReplacement}
+      />
+
+      <MoveAssignmentDialog
+        open={moveAssignmentId !== null}
+        assignmentId={moveAssignmentId}
+        selectedDate={selectedDate}
+        onClose={() => setMoveAssignmentId(null)}
+        onMoved={async () => {
+          setMoveAssignmentId(null)
+          await loadSupervision(selectedDate)
+        }}
+      />
     </main>
-  )
-}
-
-
-export default function PlanningSupervisionPage() {
-  return (
-    <Suspense
-      fallback={
-        <main className="min-h-screen bg-slate-100 px-4 py-6 text-slate-900 sm:px-6 xl:px-8">
-          <section className="rounded-3xl border border-slate-200 bg-white p-10 text-center text-slate-600 shadow-sm">
-            Chargement de la supervision…
-          </section>
-        </main>
-      }
-    >
-      <PlanningSupervisionContent />
-    </Suspense>
   )
 }
 
@@ -823,9 +1496,22 @@ function SummaryCard({
 function StructureCard({
   structure,
   selectedDate,
+  onOpenQuickPanel,
+  onOpenMissingSlot,
+  creatingVacancyKey,
 }: {
   structure: StructureSummary
   selectedDate: string
+  onOpenQuickPanel: (
+    agent: CompactAgent,
+    structure: StructureSummary,
+    slot: SlotSummary
+  ) => void
+  onOpenMissingSlot: (
+    structure: StructureSummary,
+    slot: SlotSummary
+  ) => void | Promise<void>
+  creatingVacancyKey: string | null
 }) {
   const tone = {
     ok: {
@@ -948,18 +1634,52 @@ function StructureCard({
             </div>
 
             <div className="flex min-h-8 flex-wrap items-center gap-1.5">
-              {slot.agents.length === 0 ? (
-                <span className="rounded-lg border border-dashed border-slate-300 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-400">
-                  Aucun agent
-                </span>
-              ) : (
-                slot.agents.map((agent) => (
-                  <MiniAgentBadge
-                    key={agent.id}
-                    agent={agent}
-                  />
-                ))
-              )}
+              {slot.agents.length === 0 &&
+                slot.missing === 0 && (
+                  <span className="rounded-lg border border-dashed border-slate-300 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-400">
+                    Aucun besoin
+                  </span>
+                )}
+
+              {slot.agents.map((agent) => (
+                <MiniAgentBadge
+                  key={agent.id}
+                  agent={agent}
+                  onClick={() =>
+                    onOpenQuickPanel(
+                      agent,
+                      structure,
+                      slot
+                    )
+                  }
+                />
+              ))}
+
+              {slot.missing > 0 &&
+                !slot.agents.some(
+                  (agent) =>
+                    agent.status === "absence"
+                ) && (
+                  <button
+                    type="button"
+                    disabled={
+                      creatingVacancyKey ===
+                      `${structure.id}:${slot.key}`
+                    }
+                    onClick={() =>
+                      void onOpenMissingSlot(
+                        structure,
+                        slot
+                      )
+                    }
+                    className="inline-flex items-center rounded-lg border border-dashed border-amber-300 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700 transition hover:border-amber-500 hover:bg-amber-100 disabled:cursor-wait disabled:opacity-60"
+                  >
+                    {creatingVacancyKey ===
+                    `${structure.id}:${slot.key}`
+                      ? "Création…"
+                      : `+ Remplaçant (${slot.missing})`}
+                  </button>
+                )}
             </div>
           </div>
         ))}
@@ -981,28 +1701,36 @@ function StructureCard({
 
 function MiniAgentBadge({
   agent,
+  onClick,
 }: {
   agent: CompactAgent
+  onClick: () => void
 }) {
   const styles = {
     present:
-      "border-cyan-200 bg-cyan-50 text-cyan-800",
+      "border-cyan-200 bg-cyan-50 text-cyan-800 hover:border-cyan-400 hover:bg-cyan-100",
     replacement:
-      "border-violet-200 bg-violet-50 text-violet-800",
+      "border-violet-200 bg-violet-50 text-violet-800 hover:border-violet-400 hover:bg-violet-100",
     absence:
-      "border-red-200 bg-red-50 text-red-700",
+      "border-red-200 bg-red-50 text-red-700 hover:border-red-400 hover:bg-red-100",
   }
 
   return (
-    <span
-      title={agent.name}
-      className={`inline-flex max-w-[120px] items-center rounded-lg border px-2.5 py-1 text-[11px] font-bold shadow-sm ${styles[agent.status]}`}
+    <button
+      type="button"
+      title={
+        agent.status === "absence"
+          ? "Ouvrir le poste vacant"
+          : `Ouvrir la fiche rapide de ${agent.name}`
+      }
+      onClick={onClick}
+      className={`inline-flex max-w-[120px] items-center rounded-lg border px-2.5 py-1 text-[11px] font-bold shadow-sm transition ${styles[agent.status]}`}
     >
       <span className="truncate">
         {agent.status === "absence"
           ? "VACANT"
           : getShortName(agent.name)}
       </span>
-    </span>
+    </button>
   )
 }

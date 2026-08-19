@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase"
+import { agentisCore } from "@/lib/core"
 
 export type ReplacementCandidate = {
   agentId: number
@@ -210,6 +211,18 @@ export const ReplacementEngine = {
         historyError
       )
     }
+
+    await agentisCore.emit({
+  name: "REPLACEMENT_CREATED",
+  module: "remplacements",
+  entityType: "replacement",
+  entityId: String(data.id),
+  severity: "success",
+  payload: {
+    assignment: data,
+    candidate: selectedCandidate,
+  },
+})
 
     return data
   },

@@ -2,10 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { useParams, useRouter } from "next/navigation"
+import {
+  useParams,
+  useRouter,
+  useSearchParams,
+} from "next/navigation"
 
 import AgentForm from "@/components/agentis/forms/AgentForm"
-import AgentIdentityCard from "@/components/agentis/AgentIdentityCard"
+import AgentIdentityCard from "@/components/ui/agentis/AgentIdentityCard"
 import AgentOrganizationCard from "@/components/agentis/AgentOrganizationCard"
 import RHAlertsPanel from "@/components/agentis/RHAlertsPanel"
 import TabsBar from "@/components/agentis/TabsBar"
@@ -103,12 +107,51 @@ const tabs = [
 ]
 
 export default function AgentProfile() {
-  const params = useParams()
-  const router = useRouter()
+ const params = useParams()
+const router = useRouter()
+const searchParams = useSearchParams()
 
-  const id = String(params.id || "")
+const id = String(params.id || "")
 
-  const [activeTab, setActiveTab] = useState("Identité")
+const [activeTab, setActiveTab] =
+  useState("Identité")
+
+  useEffect(() => {
+  const requestedTab =
+    searchParams.get("tab")
+
+  const tabMapping: Record<
+    string,
+    string
+  > = {
+    contrat: "Contrat",
+    formations: "Formations",
+    habilitations: "Habilitations",
+    "visites-medicales":
+      "Visites médicales",
+    absences: "Absences",
+    planning: "Planning",
+    documents: "Documents",
+    competences: "Compétences",
+    coordonnees: "Coordonnées",
+    identite: "Identité",
+  }
+
+  if (!requestedTab) {
+    return
+  }
+
+  const matchingTab =
+    tabMapping[requestedTab]
+
+  if (
+    matchingTab &&
+    tabs.includes(matchingTab)
+  ) {
+    setActiveTab(matchingTab)
+  }
+}, [searchParams])
+
   const [editMode, setEditMode] = useState(false)
 
   const [agent, setAgent] = useState<AgentRecord | null>(null)
@@ -750,14 +793,15 @@ export default function AgentProfile() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 px-6 py-8 text-slate-900 lg:px-8">
+        <main className="min-h-screen bg-slate-50 px-6 py-8 text-slate-900 lg:px-8">
       <div className="mx-auto w-full max-w-[1800px]">
-        <Link
-          href="/dashboard/agents"
-          className="mb-5 inline-flex items-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700"
-        >
-          ← Retour aux agents
-        </Link>
+       <button
+  type="button"
+  onClick={() => router.back()}
+  className="mb-5 inline-flex items-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700"
+>
+  ← Retour
+</button>
 
         <header className="mb-8 flex flex-col gap-5 border-b border-slate-200 pb-6 lg:flex-row lg:items-center lg:justify-between">
           <div>
