@@ -19,9 +19,14 @@ export type PlanningAssignmentUpdate =
 const planningSelect = `
   *,
   agent:agent_id (
+  id,
+  nom,
+  poste_id,
+  poste:poste_id (
     id,
     nom
-  ),
+  )
+),
   site:site_id (
     id,
     nom,
@@ -892,6 +897,35 @@ async createAssignment(
         createdVacancies?.[0] ?? null,
     }
   },
+
+  async createPeriscolaireAssignment(params: {
+  date: string
+  agentId: string | number
+  siteId: string | number
+}) {
+  const { data, error } = await supabase
+    .from("planning_journalier")
+    .insert({
+      date: params.date,
+      agent_id: params.agentId,
+      site_id: params.siteId,
+      service: null,
+      service_id: 5,
+      heure_debut: null,
+      heure_fin: null,
+      statut: "Présent",
+      commentaire: "Affectation périscolaire",
+      est_poste_vacant: false,
+    })
+    .select(planningSelect)
+    .single()
+
+  if (error) {
+    throw error
+  }
+
+  return data
+},
 
   /**
    * Renvoie la date la plus récente du planning.

@@ -1,5 +1,12 @@
 import { supabase } from "@/lib/supabase"
 import { agentisCore } from "@/lib/core"
+import {
+  mapPosteToRequirementRole,
+} from "@/lib/planning/roleMapping"
+
+import type {
+  PlanningRequirementRoleKey,
+} from "@/lib/services/PlanningRequirementsService"
 
 export type ReplacementCandidate = {
   agentId: number
@@ -47,6 +54,18 @@ type AgentRow = {
   poste_id: number | null
   service_id: number | null
   site_id: number | null
+  est_polyvalent: boolean | null
+
+  poste?:
+    | {
+        id: number
+        nom: string | null
+      }
+    | {
+        id: number
+        nom: string | null
+      }[]
+    | null
 }
 
 type PlanningRow = {
@@ -92,8 +111,9 @@ type CandidateData = {
 
 export const ReplacementEngine = {
   async getCandidates(
-    vacancyId: string | number
-  ): Promise<ReplacementCandidate[]> {
+  vacancyId: string | number,
+  requiredRole?: PlanningRequirementRoleKey | null
+): Promise<ReplacementCandidate[]> {
     const vacancy = await loadVacancy(vacancyId)
 
     if (!vacancy.est_poste_vacant && vacancy.agent_id !== null) {
@@ -116,7 +136,12 @@ export const ReplacementEngine = {
 
     return data.agents
       .map((agent) =>
-        buildCandidate(agent, context, data)
+        buildCandidate(
+  agent,
+  context,
+  data,
+  requiredRole
+)
       )
       .filter((candidate) => candidate.available)
       .sort((a, b) => {
@@ -131,21 +156,23 @@ export const ReplacementEngine = {
       })
   },
 
-  async getBestCandidates(
-    vacancyId: string | number,
-    limit = 5
-  ): Promise<ReplacementCandidate[]> {
-    const candidates = await this.getCandidates(
-      vacancyId
-    )
+ async getBestCandidates(
+  vacancyId: string | number,
+  limit = 5,
+  requiredRole?: PlanningRequirementRoleKey | null
+): Promise<ReplacementCandidate[]> {
+  const candidates = await this.getCandidates(
+    vacancyId,
+    requiredRole
+  )
 
-    return candidates.slice(
-      0,
-      Math.max(1, limit)
-    )
-  },
+  return candidates.slice(
+    0,
+    Math.max(1, limit)
+  )
+},
 
-  async assignCandidate(params: {
+async assignCandidate(params: {
     vacancyId: string | number
     agentId: string | number
     commentaire?: string | null
@@ -271,17 +298,22 @@ async function loadCandidateData(
     competencesResult,
   ] = await Promise.all([
     supabase
-      .from("agents")
-      .select(`
-        id,
-        nom,
-        statut,
-        poste_id,
-        service_id,
-        site_id
-      `)
-      .eq("statut", "Actif")
-      .order("nom", { ascending: true }),
+  .from("agents")
+  .select(`
+    id,
+    nom,
+    statut,
+    poste_id,
+    service_id,
+    site_id,
+    est_polyvalent,
+    poste:poste_id (
+      id,
+      nom
+    )
+  `)
+  .eq("statut", "Actif")
+  .order("nom", { ascending: true }),
 
     supabase
       .from("planning_journalier")
@@ -371,7 +403,8 @@ async function loadCandidateData(
 function buildCandidate(
   agent: AgentRow,
   context: ReplacementContext,
-  data: CandidateData
+  data: CandidateData,
+  requiredRole?: PlanningRequirementRoleKey | null
 ): ReplacementCandidate {
   const reasons: string[] = []
   const warnings: string[] = []
@@ -398,55 +431,100 @@ function buildCandidate(
         absence.statut_validation !== "Refusée"
     )
 
-  const sameSite =
-    String(agent.site_id) ===
+ const hasAssignedSite =
+  agent.site_id !== null &&
+  agent.site_id !== undefined
+
+const sameSite =
+  hasAssignedSite &&
+  String(agent.site_id) ===
     String(context.siteId)
 
-  const sameService =
-    context.serviceId !== null
-      ? String(agent.service_id) ===
-        String(context.serviceId)
-      : false
 
-  const samePoste = false
+const isPolyvalent =
+  !hasAssignedSite
 
-  const hasValidMedicalVisit =
-    hasValidMedicalVisitForAgent(
-      agent.id,
-      context.date,
-      data.medicalVisits
-    )
+ const sameService =
+  context.serviceId !== null
+    ? String(agent.service_id) ===
+      String(context.serviceId)
+    : false
 
-  const activeContract =
-    hasActiveContractForAgent(
-      agent.id,
-      context.date,
-      data.contracts
-    )
+const agentPoste =
+  Array.isArray(agent.poste)
+    ? agent.poste[0]
+    : agent.poste
 
-  const hasFormation = hasQualification(
+const agentRole =
+  mapPosteToRequirementRole(
+    agentPoste?.nom
+  )
+
+const samePoste =
+  requiredRole
+    ? agentRole === requiredRole
+    : false
+
+const hasValidMedicalVisit =
+  hasValidMedicalVisitForAgent(
+    agent.id,
+    context.date,
+    data.medicalVisits
+  )
+
+const activeContract =
+  hasActiveContractForAgent(
+    agent.id,
+    context.date,
+    data.contracts
+  )
+
+const hasFormation =
+  hasQualification(
     agent.id,
     data.formations
   )
 
-  const hasHabilitation = hasQualification(
+const hasHabilitation =
+  hasQualification(
     agent.id,
     data.habilitations
   )
 
-  const hasCompetence = hasQualification(
+const hasCompetence =
+  hasQualification(
     agent.id,
     data.competences
   )
 
-  let score = 45
+let score = 45
+
+if (requiredRole) {
+  if (samePoste) {
+    score += 25
+    reasons.push(
+      "Poste compatible avec le besoin"
+    )
+  } else {
+    warnings.push(
+      "Poste différent du besoin"
+    )
+  }
+}
 
   if (sameSite) {
-    score += 20
-    reasons.push("Même site")
-  } else {
-    warnings.push("Autre site principal")
-  }
+  score += 20
+  reasons.push("Même site")
+} else if (isPolyvalent) {
+  score += 10
+  reasons.push(
+    "Agent polyvalent sans site principal"
+  )
+} else {
+  warnings.push(
+    "Autre site principal"
+  )
+}
 
   if (sameService) {
     score += 15

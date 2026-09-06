@@ -12,10 +12,8 @@ import {
   ShieldCheck,
 } from "lucide-react"
 
-import { createClient } from "@/lib/supabase/client"
 import Link from "next/link"
 
-const supabase = createClient()
 
 function getErrorMessage(error: unknown) {
   if (error instanceof Error) {
@@ -30,7 +28,7 @@ function getErrorMessage(error: unknown) {
 }
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("")
+  const [identifier, setIdentifier] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] =
     useState(false)
@@ -42,184 +40,82 @@ export default function LoginPage() {
     useState("")
 
   async function handleSubmit(
-    event: React.FormEvent<HTMLFormElement>
-  ) {
-    event.preventDefault()
+  event: React.FormEvent<HTMLFormElement>
+) {
+  event.preventDefault()
 
-    try {
-      setSubmitting(true)
-      setErrorMessage("")
+  try {
+    setSubmitting(true)
+    setErrorMessage("")
 
-      const normalizedEmail = email
+    const normalizedIdentifier =
+      identifier
         .trim()
         .toLowerCase()
 
-      if (!normalizedEmail) {
-        throw new Error(
-          "L’adresse email est obligatoire."
-        )
-      }
+    if (!normalizedIdentifier) {
+      throw new Error(
+        "L’identifiant est obligatoire."
+      )
+    }
 
-      if (!password) {
-        throw new Error(
-          "Le mot de passe est obligatoire."
-        )
-      }
+    if (!password) {
+      throw new Error(
+        "Le mot de passe est obligatoire."
+      )
+    }
 
-      /*
-       * IMPORTANT
-       * On détruit d'abord une éventuelle ancienne
-       * session afin d'éviter de conserver le compte
-       * précédemment connecté.
-       */
-      await supabase.auth.signOut()
+    const response =
+      await fetch(
+        "/api/auth/login",
+        {
+          method: "POST",
 
-      const {
-        data: authData,
-        error: authError,
-      } =
-        await supabase.auth.signInWithPassword({
-          email: normalizedEmail,
-          password,
-        })
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
 
-      if (authError) {
-        throw authError
-      }
-
-      if (!authData.user) {
-        throw new Error(
-          "Aucun utilisateur n’a été retourné après la connexion."
-        )
-      }
-
-      /*
-       * Sécurité supplémentaire :
-       * l'utilisateur Supabase retourné doit bien
-       * correspondre à l'adresse saisie.
-       */
-      const authenticatedEmail =
-        authData.user.email
-          ?.trim()
-          .toLowerCase() ?? ""
-
-      if (
-        authenticatedEmail !== normalizedEmail
-      ) {
-        await supabase.auth.signOut()
-
-        throw new Error(
-          "La session ouverte ne correspond pas au compte demandé."
-        )
-      }
-
-      /*
-       * On récupère le profil correspondant
-       * STRICTEMENT à l'UID authentifié.
-       */
-      const {
-        data: profile,
-        error: profileError,
-      } = await supabase
-        .from("profiles")
-        .select(
-          "id, email, role, actif, agent_id"
-        )
-        .eq("id", authData.user.id)
-        .maybeSingle()
-
-      if (profileError) {
-        await supabase.auth.signOut()
-        throw profileError
-      }
-
-      if (!profile) {
-        await supabase.auth.signOut()
-
-        throw new Error(
-          "Aucun profil AGENTIS n’est associé à ce compte."
-        )
-      }
-
-      if (profile.actif !== true) {
-        await supabase.auth.signOut()
-
-        throw new Error(
-          "Ce compte est désactivé."
-        )
-      }
-
-      /*
-       * Vérification supplémentaire entre
-       * l'adresse Auth et l'adresse du profil.
-       */
-      const profileEmail =
-        profile.email
-          ?.trim()
-          .toLowerCase() ?? ""
-
-      if (
-        profileEmail &&
-        profileEmail !== normalizedEmail
-      ) {
-        await supabase.auth.signOut()
-
-        throw new Error(
-          "Le profil AGENTIS ne correspond pas à l’adresse email connectée."
-        )
-      }
-
-      /*
-       * Mise à jour de la dernière connexion.
-       * Une erreur ici ne doit pas empêcher
-       * l'utilisateur d'accéder à AGENTIS.
-       */
-      const now = new Date().toISOString()
-
-      const { error: updateError } =
-        await supabase
-          .from("profiles")
-          .update({
-            derniere_connexion: now,
-            updated_at: now,
-          })
-          .eq("id", authData.user.id)
-
-      if (updateError) {
-        console.warn(
-          "Impossible de mettre à jour la dernière connexion :",
-          updateError.message
-        )
-      }
-
-      /*
-       * REDIRECTION SELON LE RÔLE
-       */
-      let destination = "/dashboard"
-
-      if (profile.role === "agent") {
-        destination =
-          "/dashboard/mon-espace"
-      }
-
-      if (profile.role === "super_admin") {
-        destination = "/dashboard"
-      }
-
-      /*
-       * Navigation complète :
-       * permet au serveur Next.js de repartir
-       * avec la nouvelle session Supabase.
-       */
-      window.location.replace(destination)
-    } catch (error: unknown) {
-      setErrorMessage(
-        getErrorMessage(error)
+          body: JSON.stringify({
+            identifier:
+              normalizedIdentifier,
+            password,
+          }),
+        }
       )
 
-      setSubmitting(false)
+    const result =
+      (await response.json()) as {
+        ok?: boolean
+        error?: string
+        destination?: string
+      }
+
+    if (
+      !response.ok ||
+      result.ok !== true
+    ) {
+      throw new Error(
+        result.error ||
+          "Impossible de vous connecter."
+      )
     }
+
+    const destination =
+      result.destination ||
+      "/dashboard"
+
+    window.location.replace(
+      destination
+    )
+  } catch (error: unknown) {
+    setErrorMessage(
+      getErrorMessage(error)
+    )
+
+    setSubmitting(false)
   }
+}
 
   return (
     <main className="min-h-screen bg-slate-950 px-4 py-8 text-slate-100 sm:px-6">
@@ -331,27 +227,27 @@ export default function LoginPage() {
                 }
                 className="mt-8 space-y-5"
               >
-                {/* EMAIL */}
-                <label className="block">
-                  <span className="mb-2 flex items-center gap-2 text-sm font-bold text-slate-700">
-                    <Mail className="h-4 w-4 text-amber-600" />
-                    Adresse email
-                  </span>
+                {/* IDENTIFIANT */}
+<label className="block">
+  <span className="mb-2 flex items-center gap-2 text-sm font-bold text-slate-700">
+    <Mail className="h-4 w-4 text-amber-600" />
+    Email ou identifiant AGENTIS
+  </span>
 
-                  <input
-                    type="email"
-                    autoComplete="username"
-                    value={email}
-                    onChange={(event) =>
-                      setEmail(
-                        event.target.value
-                      )
-                    }
-                    disabled={submitting}
-                    placeholder="vous@exemple.fr"
-                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-400 disabled:cursor-wait disabled:bg-slate-100"
-                  />
-                </label>
+  <input
+    type="text"
+    autoComplete="username"
+    value={identifier}
+    onChange={(event) =>
+      setIdentifier(
+        event.target.value
+      )
+    }
+    disabled={submitting}
+    placeholder="sarah.achab ou vous@exemple.fr"
+    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-400 disabled:cursor-wait disabled:bg-slate-100"
+  />
+</label>
 
                 {/* MOT DE PASSE */}
                 <label className="block">

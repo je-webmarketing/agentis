@@ -10,7 +10,9 @@ const allowedRoles: ProfileRole[] = [
 ]
 
 export type CreateAdminUserInput = {
-  email: string
+  email?: string | null
+  contact_email?: string | null
+  login_identifier?: string | null
   nom?: string | null
   prenom?: string | null
   telephone?: string | null
@@ -22,9 +24,14 @@ export type CreateAdminUserInput = {
   service_id?: string | number | null
   actif?: boolean
   redirectTo?: string
+  additional_site_ids?: Array<string | number>
 }
 
-export type UpdateAdminUserInput = ProfileUpdatePayload & { id: string }
+export type UpdateAdminUserInput =
+  ProfileUpdatePayload & {
+    id: string
+    additional_site_ids?: Array<string | number>
+  }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -87,38 +94,149 @@ function normalizeCustomRoleId(value: unknown) {
   )
 }
 
+function normalizeIdArray(
+  value: unknown
+): Array<string | number> {
+  if (
+    value === undefined ||
+    value === null
+  ) {
+    return []
+  }
+
+  if (!Array.isArray(value)) {
+    throw new Error(
+      "La liste des sites supplémentaires possède un format invalide."
+    )
+  }
+
+  return value
+    .map((item) =>
+      normalizeId(item)
+    )
+    .filter(
+      (
+        item
+      ): item is string | number =>
+        item !== null
+    )
+}
+
 export const UserValidator = {
   validateCreate(body: unknown): CreateAdminUserInput {
-    if (!isRecord(body)) throw new Error("Le corps de la requête est invalide.")
+  if (!isRecord(body)) {
+    throw new Error(
+      "Le corps de la requête est invalide."
+    )
+  }
 
-    return {
-      email: validateEmail(body.email),
-      nom: normalizeText(body.nom),
-      prenom: normalizeText(body.prenom),
-      telephone: normalizeText(body.telephone),
-      fonction: normalizeText(body.fonction),
-      role: validateRole(body.role),
-      custom_role_id:
-  normalizeCustomRoleId(
-    body.custom_role_id
+  const role =
+    validateRole(body.role)
+
+  const siteId =
+    normalizeId(body.site_id)
+
+  if (
+    role === "responsable_site" &&
+    !siteId
+  ) {
+    throw new Error(
+      "Le site est obligatoire pour un responsable de site."
+    )
+  }
+
+  return {
+    contact_email:
+      body.contact_email !== undefined &&
+      body.contact_email !== null &&
+      body.contact_email !== ""
+        ? validateEmail(
+            body.contact_email
+          )
+        : null,
+
+    login_identifier:
+      typeof body.login_identifier === "string" &&
+      body.login_identifier.trim()
+        ? body.login_identifier
+            .trim()
+            .toLowerCase()
+        : null,
+
+    nom:
+      normalizeText(body.nom),
+
+    prenom:
+      normalizeText(body.prenom),
+
+    telephone:
+      normalizeText(body.telephone),
+
+    fonction:
+      normalizeText(body.fonction),
+
+    role,
+
+    custom_role_id:
+      normalizeCustomRoleId(
+        body.custom_role_id
+      ),
+
+    structure_id:
+      normalizeId(
+        body.structure_id
+      ),
+
+    site_id:
+      siteId,
+
+    additional_site_ids:
+  normalizeIdArray(
+    body.additional_site_ids
   ),
-      structure_id: normalizeId(body.structure_id),
-      site_id: normalizeId(body.site_id),
-      service_id: normalizeId(body.service_id),
-      actif: typeof body.actif === "boolean" ? body.actif : true,
-      redirectTo: typeof body.redirectTo === "string" && body.redirectTo.trim()
+
+    service_id:
+      normalizeId(
+        body.service_id
+      ),
+
+    actif:
+      typeof body.actif === "boolean"
+        ? body.actif
+        : true,
+
+    redirectTo:
+      typeof body.redirectTo === "string" &&
+      body.redirectTo.trim()
         ? body.redirectTo.trim()
         : undefined,
-    }
-  },
+  }
+},
 
   validateUpdate(body: unknown): UpdateAdminUserInput {
     if (!isRecord(body)) throw new Error("Le corps de la requête est invalide.")
     if (typeof body.id !== "string" || !body.id.trim()) {
       throw new Error("L’identifiant utilisateur est obligatoire.")
     }
-
+   
     const result: UpdateAdminUserInput = { id: body.id.trim() }
+
+     if (body.contact_email !== undefined) {
+  result.contact_email =
+    body.contact_email === null ||
+    body.contact_email === ""
+      ? null
+      : validateEmail(body.contact_email)
+}
+if (body.login_identifier !== undefined) {
+  result.login_identifier =
+    body.login_identifier === null ||
+    body.login_identifier === ""
+      ? null
+      : normalizeText(
+          body.login_identifier
+        )?.toLowerCase() ?? null
+}
 
     if (body.email !== undefined) result.email = validateEmail(body.email)
     if (body.nom !== undefined) result.nom = normalizeText(body.nom)
@@ -142,6 +260,24 @@ export const UserValidator = {
       }
       result.actif = body.actif
     }
+
+   if (
+  result.role === "responsable_site" &&
+  !result.site_id
+) {
+  throw new Error(
+    "Le site est obligatoire pour un responsable de site."
+  )
+} 
+
+if (
+  body.additional_site_ids !== undefined
+) {
+  result.additional_site_ids =
+    normalizeIdArray(
+      body.additional_site_ids
+    )
+}
 
     return result
   },

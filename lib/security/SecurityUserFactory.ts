@@ -3,14 +3,67 @@ import type {
 } from "@/lib/services/ProfileService"
 
 import { getRolePermissions } from "./RolePermissions"
+
 import type {
   PermissionKey,
   SecurityScope,
+  SecurityScopeType,
   SecurityUser,
 } from "./types"
 
+function buildCustomScope(
+  profile: ProfileRecord,
+  scopeType: SecurityScopeType
+): SecurityScope {
+  switch (scopeType) {
+    case "global":
+      return {
+        type: "global",
+      }
 
-function buildScope(
+    case "structure":
+      return {
+        type: "structure",
+        structureIds:
+          profile.structure_id !== null
+            ? [profile.structure_id]
+            : [],
+      }
+
+    case "site":
+      return {
+        type: "site",
+        siteIds:
+          profile.site_id !== null
+            ? [profile.site_id]
+            : [],
+      }
+
+    case "service":
+      return {
+        type: "service",
+        serviceIds:
+          profile.service_id !== null
+            ? [profile.service_id]
+            : [],
+      }
+
+    case "self":
+      return {
+        type: "self",
+        agentId:
+          profile.agent_id ?? null,
+      }
+
+    default:
+      return {
+        type: "self",
+        agentId: null,
+      }
+  }
+}
+
+function buildDefaultScope(
   profile: ProfileRecord
 ): SecurityScope {
   switch (profile.role) {
@@ -21,16 +74,13 @@ function buildScope(
       }
 
     case "responsable_rh":
-      if (profile.structure_id) {
-        return {
-          type: "structure",
-          structureIds: [profile.structure_id],
-        }
-      }
-
-      return {
-        type: "global",
-      }
+  return {
+    type: "structure",
+    structureIds:
+      profile.structure_id !== null
+        ? [profile.structure_id]
+        : [],
+  }
 
     case "responsable_site":
       return {
@@ -53,7 +103,8 @@ function buildScope(
     case "agent":
       return {
         type: "self",
-        agentId: null,
+        agentId:
+          profile.agent_id ?? null,
       }
 
     default:
@@ -66,13 +117,16 @@ function buildScope(
 
 export function createSecurityUser(
   profile: ProfileRecord,
-  customPermissions?: PermissionKey[]
+  customPermissions?: PermissionKey[],
+  customScopeType?: SecurityScopeType
 ): SecurityUser {
-  const scope = buildScope(profile)
-
-  if (profile.role === "agent") {
-    scope.agentId = profile.agent_id ?? null
-  }
+  const scope =
+    customScopeType
+      ? buildCustomScope(
+          profile,
+          customScopeType
+        )
+      : buildDefaultScope(profile)
 
   const displayName = [
     profile.prenom,
@@ -84,14 +138,26 @@ export function createSecurityUser(
 
   return {
     id: profile.id,
-    email: profile.email,
+
+    email:
+      profile.email,
+
     displayName:
-      displayName || profile.email,
-    role: profile.role,
-    active: profile.actif,
+      displayName ||
+      profile.email,
+
+    role:
+      profile.role,
+
+    active:
+      profile.actif,
+
     permissions:
-  customPermissions ??
-  getRolePermissions(profile.role),
+      customPermissions ??
+      getRolePermissions(
+        profile.role
+      ),
+
     scope,
   }
 }

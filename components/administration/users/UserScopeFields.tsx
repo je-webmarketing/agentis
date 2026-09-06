@@ -27,8 +27,17 @@ type SiteItem = ReferenceItem & {
 
 type UserScopeFieldsProps = {
   values: UserScopeValues
+  role?: string
+  additionalSiteIds?: string[]
   disabled?: boolean
-  onChange: (values: UserScopeValues) => void
+
+  onChange: (
+    values: UserScopeValues
+  ) => void
+
+  onAdditionalSitesChange?: (
+    siteIds: string[]
+  ) => void
 }
 
 const selectClass =
@@ -36,8 +45,11 @@ const selectClass =
 
 export default function UserScopeFields({
   values,
+  role,
+  additionalSiteIds = [],
   disabled = false,
   onChange,
+  onAdditionalSitesChange,
 }: UserScopeFieldsProps) {
   const [structures, setStructures] = useState<
     ReferenceItem[]
@@ -282,6 +294,74 @@ export default function UserScopeFields({
           </select>
         </label>
       </div>
+{role === "responsable_site" && (
+  <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50/40 p-4">
+    <div className="mb-4">
+      <h3 className="text-sm font-extrabold text-slate-900">
+        Sites supplémentaires
+      </h3>
+
+      <p className="mt-1 text-xs text-slate-600">
+        Le site sélectionné ci-dessus reste le site principal.
+        Vous pouvez ajouter ici les autres sites gérés par ce responsable.
+      </p>
+    </div>
+
+    <div className="grid gap-3 md:grid-cols-2">
+      {filteredSites
+        .filter(
+          (site) =>
+            String(site.id) !==
+            String(values.site_id)
+        )
+        .map((site) => {
+          const siteId =
+            String(site.id)
+
+          const checked =
+            additionalSiteIds.includes(
+              siteId
+            )
+
+          return (
+            <label
+              key={site.id}
+              className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3"
+            >
+              <input
+                type="checkbox"
+                checked={checked}
+                disabled={disabled}
+                onChange={(event) => {
+                  const next =
+                    event.target.checked
+                      ? [
+                          ...additionalSiteIds,
+                          siteId,
+                        ]
+                      : additionalSiteIds.filter(
+                          (id) =>
+                            id !== siteId
+                        )
+
+                  onAdditionalSitesChange?.(
+                    next
+                  )
+                }}
+                className="h-4 w-4 rounded border-slate-300 text-amber-500 focus:ring-amber-400"
+              />
+
+              <span className="text-sm font-medium text-slate-700">
+                {site.nom ||
+                  `Site ${site.id}`}
+              </span>
+            </label>
+          )
+        })}
+    </div>
+  </div>
+)}
+
     </section>
   )
 }

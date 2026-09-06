@@ -66,6 +66,24 @@ export const RoleService = {
     return (data || []) as SecurityRoleRecord[]
   },
 
+  async getById(
+  id: number
+): Promise<SecurityRoleRecord | null> {
+  const { data, error } = await supabase
+    .from("security_roles")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle()
+
+  if (error) {
+    throw error
+  }
+
+  return (
+    data as SecurityRoleRecord | null
+  ) ?? null
+},
+
   async create(
     payload: SecurityRoleCreatePayload
   ): Promise<SecurityRoleRecord> {

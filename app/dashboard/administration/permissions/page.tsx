@@ -23,6 +23,7 @@ import RolePermissionService from "@/lib/services/RolePermissionService"
 
 import {
   ALL_PERMISSIONS,
+  getRolePermissions,
 } from "@/lib/security/RolePermissions"
 
 import type {
@@ -72,6 +73,9 @@ export default function PermissionsPage() {
   const [selectedPermissions, setSelectedPermissions] =
     useState<PermissionKey[]>([])
 
+  const [isInherited, setIsInherited] =
+  useState(false)
+
   const [loading, setLoading] =
     useState(true)
 
@@ -89,15 +93,24 @@ export default function PermissionsPage() {
       setLoading(true)
       setErrorMessage("")
 
-     const data = await RoleService.list()
+     const data =
+  await RoleService.list()
 
-setRoles(data)
+const customRoles =
+  data.filter(
+    (role) =>
+      role.is_system === false
+  )
+
+setRoles(customRoles)
 
 if (
-  data.length > 0 &&
+  customRoles.length > 0 &&
   selectedRoleId === null
 ) {
-  setSelectedRoleId(data[0].id)
+  setSelectedRoleId(
+    customRoles[0].id
+  )
 }
     } catch (error: unknown) {
       setRoles([])
@@ -115,31 +128,66 @@ if (
 
   useEffect(() => {
     async function loadPermissions() {
-      if (selectedRoleId === null) {
-        setSelectedPermissions([])
-        return
-      }
+     if (selectedRoleId === null) {
+  setSelectedPermissions([])
+  setIsInherited(false)
+  return
+}
 
       try {
         setErrorMessage("")
         setSuccessMessage("")
 
         const permissions =
-          await RolePermissionService.listByRole(
-            selectedRoleId
-          )
+  await RolePermissionService.listByRole(
+    selectedRoleId
+  )
 
-        setSelectedPermissions(permissions)
+if (permissions.length > 0) {
+  setSelectedPermissions(
+    permissions
+  )
+  setIsInherited(false)
+  return
+}
+
+const selectedRole =
+  roles.find(
+    (role) =>
+      role.id === selectedRoleId
+  )
+
+if (!selectedRole) {
+  setSelectedPermissions([])
+  setIsInherited(false)
+  return
+}
+
+const inheritedPermissions =
+  getRolePermissions(
+    selectedRole.base_role
+  )
+
+setSelectedPermissions(
+  inheritedPermissions
+)
+
+setIsInherited(true)
+
       } catch (error: unknown) {
         setSelectedPermissions([])
         setErrorMessage(
           getErrorMessage(error)
         )
+        setIsInherited(false)
       }
     }
 
     void loadPermissions()
-  }, [selectedRoleId])
+  }, [
+  selectedRoleId,
+  roles,
+])
 
   const groupedPermissions = useMemo(() => {
     const groups = new Map<
@@ -162,16 +210,18 @@ if (
   }, [])
 
   function togglePermission(
-    permission: PermissionKey
-  ) {
-    setSelectedPermissions((current) =>
-      current.includes(permission)
-        ? current.filter(
-            (item) => item !== permission
-          )
-        : [...current, permission]
-    )
-  }
+  permission: PermissionKey
+) {
+  setIsInherited(false)
+
+  setSelectedPermissions((current) =>
+    current.includes(permission)
+      ? current.filter(
+          (item) => item !== permission
+        )
+      : [...current, permission]
+  )
+}
 
   async function handleSave() {
     if (selectedRoleId === null) {
@@ -237,6 +287,21 @@ if (
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-600">
             AGENTIS · Administration
           </p>
+
+          {isInherited && selectedRoleId !== null && (
+  <section className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
+    <p className="font-bold">
+      Permissions héritées
+    </p>
+
+    <p className="mt-1">
+      Ce rôle utilise actuellement les permissions
+      de son rôle système parent. Toute modification
+      puis sauvegarde créera une configuration
+      personnalisée pour ce rôle.
+    </p>
+  </section>
+)}
 
           <div className="mt-3 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
             <div>

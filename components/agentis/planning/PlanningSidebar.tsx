@@ -174,12 +174,23 @@ export default function PlanningSidebar({
         (row) => String(row.site_id) === siteId
       )
 
-      const siteExpected = Object.values(
-        requirements
-      ).reduce(
-        (total, value) => total + (value ?? 0),
-        0
-      )
+    const siteExpected = Object.values(
+  requirements
+).reduce((total, value) => {
+  if (typeof value === "number") {
+    return total + value
+  }
+
+  const roleTotal = Object.values(
+    value || {}
+  ).reduce(
+    (sum, roleValue) =>
+      sum + (Number(roleValue) || 0),
+    0
+  )
+
+  return total + roleTotal
+}, 0)
 
       const siteAssigned = siteRows.filter(
         (row) => !isVacancy(row)

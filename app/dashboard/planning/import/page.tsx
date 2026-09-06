@@ -16,6 +16,8 @@ export default function ImportPlanningPage() {
   const [workbook, setWorkbook] = useState<XLSX.WorkBook | null>(null)
   const [sheetNames, setSheetNames] = useState<string[]>([])
   const [selectedSheet, setSelectedSheet] = useState("")
+  const [planningDate, setPlanningDate] =
+  useState("")
   const [rows, setRows] = useState<any[]>([])
 
   function readSheet(wb: XLSX.WorkBook, sheetName: string) {
@@ -81,14 +83,14 @@ export default function ImportPlanningPage() {
     if (lower.includes("places")) return false
 
     return (
-      /^[A-ZÀ-ÿ' -]+ [A-ZÀ-ÿ' -]+/i.test(text) &&
-      (
-        /\b\d+h/.test(lower) ||
-        lower.includes("abs") ||
-        lower.includes("ok") ||
-        lower.includes("remplac")
-      )
-    )
+  /^[A-ZÀ-ÿ' -]+ [A-ZÀ-ÿ' -]+/i.test(text) &&
+  (
+    /\b\d{1,2}(?:h|:)\d{0,2}\b/i.test(lower) ||
+    lower.includes("abs") ||
+    lower.includes("ok") ||
+    lower.includes("remplac")
+  )
+)
   }
 
   function formatTime(value: string | null) {
@@ -105,21 +107,38 @@ export default function ImportPlanningPage() {
 
 function parseAgent(text: string) {
   const horaires =
-    text.match(/\d{1,2}h\d{0,2}/gi) || []
+    text.match(
+      /\b\d{1,2}(?:h|:)\d{0,2}\b/gi
+    ) || []
 
   console.log("HORAIRES", text, horaires)
 
-  const heureDebut = horaires[0] ? formatTime(horaires[0]) : null
-  const heureFin = horaires[1] ? formatTime(horaires[1]) : null
+  const heureDebut =
+    horaires[0]
+      ? formatTime(horaires[0])
+      : null
+
+  const heureFin =
+    horaires[1]
+      ? formatTime(horaires[1])
+      : null
 
   let statut = "Présent"
 
-  if (text.toLowerCase().includes("abs")) statut = "Absent"
-  if (text.toLowerCase().includes("remplac")) statut = "Remplacé"
+  if (text.toLowerCase().includes("abs")) {
+    statut = "Absent"
+  }
+
+  if (text.toLowerCase().includes("remplac")) {
+    statut = "Remplacé"
+  }
 
   const nom = text
-    .replace(/\d+h\d{0,2}/gi, "")
-    .replace(/\//g, "")
+    .replace(
+      /\b\d{1,2}(?:h|:)\d{0,2}\b/gi,
+      ""
+    )
+    .replace(/\/\//g, "")
     .replace(/abs.*/i, "")
     .replace(/remplac.*/i, "")
     .replace(/ok/gi, "")
@@ -176,7 +195,7 @@ function parseAgent(text: string) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      date: "2026-06-17",
+      date: planningDate,
       affectations,
     }),
   })
@@ -230,13 +249,39 @@ function parseAgent(text: string) {
         )}
 
         {affectations.length > 0 && (
-          <button
-  onClick={importToSupabase}
-  className="mt-4 px-5 py-3 rounded-xl bg-yellow-500 text-slate-950 font-bold hover:bg-yellow-400"
->
-  Importer dans Supabase
-</button>
-        )}
+  <div className="mt-4 space-y-4">
+    <div>
+      <label
+        htmlFor="planningDate"
+        className="block mb-2 text-sm font-medium text-slate-300"
+      >
+        Date du planning
+      </label>
+
+      <input
+        id="planningDate"
+        type="date"
+        value={planningDate}
+        onChange={(e) => setPlanningDate(e.target.value)}
+        className="w-full rounded-xl bg-[#020817] border border-slate-700 px-4 py-3 text-slate-100"
+      />
+    </div>
+
+    <button
+      type="button"
+      onClick={importToSupabase}
+      disabled={!planningDate}
+      className="px-5 py-3 rounded-xl bg-yellow-500 text-slate-950 font-bold hover:bg-yellow-400 disabled:opacity-40 disabled:cursor-not-allowed"
+    >
+      Importer le planning du{" "}
+      {planningDate
+        ? new Date(
+            `${planningDate}T12:00:00`
+          ).toLocaleDateString("fr-FR")
+        : "jour sélectionné"}
+    </button>
+  </div>
+)}
       </div>
 
       {affectations.length > 0 && (

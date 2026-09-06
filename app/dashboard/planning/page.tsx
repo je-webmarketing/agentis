@@ -165,29 +165,31 @@ export default async function PlanningPage({
   const rows =
     (planning || []) as PlanningItem[]
 
-  /*
-   * =========================================================
-   * SITES DISPONIBLES
-   * =========================================================
-   */
+ /*
+ * =========================================================
+ * SITES DISPONIBLES
+ * =========================================================
+ */
 
-  const sites: string[] =
-    Array.from(
-      new Set(
-        rows
-          .map(
-            (item) =>
-              item.sites?.nom
-          )
-          .filter(
-            (
-              site
-            ): site is string =>
-              Boolean(site)
-          )
-      )
-    ).sort()
+const {
+  data: availableSites,
+  error: sitesError,
+} = await supabase
+  .from("sites")
+  .select("nom")
+  .order("nom", {
+    ascending: true,
+  })
 
+const sites: string[] =
+  sitesError
+    ? []
+    : (availableSites ?? [])
+        .map((site) => site.nom)
+        .filter(
+          (site): site is string =>
+            Boolean(site?.trim())
+        )
   /*
    * =========================================================
    * FILTRAGE

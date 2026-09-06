@@ -23,6 +23,9 @@ import AvailabilityEngine from "@/lib/services/AvailabilityEngine"
 import { supabase } from "@/lib/supabase"
 import AbsenceActions from "./actions"
 import AbsenceService from "@/lib/services/AbsenceService"
+import type {
+  PermissionKey,
+} from "@/lib/security/types"
 
 type AgentOption = {
   id: number
@@ -84,8 +87,8 @@ export default function AbsencesPage() {
     AgentOption[]
   >([])
 
-  const [currentRole, setCurrentRole] =
-  useState<string | null>(null)
+  const [permissions, setPermissions] =
+  useState<PermissionKey[]>([])
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -182,7 +185,64 @@ if (
   return
 }
 
-setCurrentRole(profile.role)
+/* =========================================
+   CHARGEMENT DES PERMISSIONS UTILISATEUR
+   ========================================= */
+
+const {
+  data: { session },
+  error: sessionError,
+} = await supabase.auth.getSession()
+
+if (sessionError || !session?.access_token) {
+  setErrorMessage(
+    "Impossible de charger les permissions utilisateur."
+  )
+  setLoading(false)
+  return
+}
+
+try {
+  const securityResponse = await fetch(
+    "/api/security/me",
+    {
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      cache: "no-store",
+    }
+  )
+
+  const securityPayload =
+    await securityResponse.json()
+
+  if (
+    securityResponse.ok &&
+    securityPayload?.ok === true &&
+    securityPayload?.user
+  ) {
+    setPermissions(
+      Array.isArray(
+        securityPayload.user.permissions
+      )
+        ? securityPayload.user.permissions
+        : []
+    )
+  } else {
+    setPermissions([])
+  }
+} catch (securityError) {
+  console.error(
+    "Erreur chargement permissions :",
+    securityError
+  )
+
+  setPermissions([])
+}
+
+/* =========================================
+   CHARGEMENT DES AGENTS
+   ========================================= */
 
 let agentsQuery = supabase
   .from("agents")
@@ -198,19 +258,6 @@ let agentsQuery = supabase
   .eq("statut", "Actif")
   .order("nom", { ascending: true })
 
-if (profile.role === "responsable_site") {
-  agentsQuery = agentsQuery.eq(
-    "site_id",
-    profile.site_id
-  )
-}
-
-if (profile.role === "chef_service") {
-  agentsQuery = agentsQuery.eq(
-    "service_id",
-    profile.service_id
-  )
-}
 
     const [absencesResult, agentsResult] =
       await Promise.all([
@@ -287,19 +334,6 @@ if (profile.role === "chef_service") {
 
 let scopedAgents = rawAgents
 
-if (profile.role === "responsable_rh") {
-  scopedAgents = rawAgents.filter((agent) => {
-    const site = Array.isArray(agent.sites)
-      ? agent.sites[0]
-      : agent.sites
-
-    return (
-      profile.structure_id != null &&
-      String(site?.structure_id) ===
-        String(profile.structure_id)
-    )
-  })
-}
 
 if (profile.role === "agent") {
   scopedAgents = []
@@ -322,14 +356,22 @@ setAgents(
   }, [loadData])
 
   const canCreate =
-  currentRole === "super_admin" ||
-  currentRole === "admin_rh" ||
-  currentRole === "responsable_rh" ||
-  currentRole === "responsable_site" ||
-  currentRole === "chef_service"
+  permissions.includes("*") ||
+  permissions.includes(
+    "absences.create"
+  )
 
-const canEdit = canCreate
-const canDelete = canCreate
+const canEdit =
+  permissions.includes("*") ||
+  permissions.includes(
+    "absences.edit"
+  )
+
+const canDelete =
+  permissions.includes("*") ||
+  permissions.includes(
+    "absences.delete"
+  )
 
   const filteredAbsences = useMemo(() => {
     const normalizedSearch =

@@ -28,6 +28,10 @@ import HabilitationsTab from "./tabs/HabilitationsTab"
 import IdentiteTab from "./tabs/IdentiteTab"
 import PlanningTab from "./tabs/PlanningTab"
 import VisitesMedicalesTab from "./tabs/VisitesMedicalesTab"
+import {
+  createEmptyWeeklyCycle,
+  type WeeklyCycleDay,
+} from "@/components/agentis/forms/AgentWeeklyCycleEditor"
 
 type RefItem = {
   id: number
@@ -53,6 +57,7 @@ type AgentRecord = {
   poste_id: number | null
   service_id: number | null
   site_id: number | null
+  est_polyvalent: boolean | null
   poste?: NamedRelation | NamedRelation[] | null
   service_ref?: NamedRelation | NamedRelation[] | null
   site?: SiteRelation | SiteRelation[] | null
@@ -74,6 +79,13 @@ type PlanningItem = {
   statut: string | null
   service: string | null
   sites?: NamedRelation | null
+}
+
+type WeeklyCycleDbRow = {
+  jour_semaine: number
+  actif: boolean
+  heure_debut: string | null
+  heure_fin: string | null
 }
 
 type AgentCoordonnees = {
@@ -161,6 +173,12 @@ const [activeTab, setActiveTab] =
   const [nom, setNom] = useState("")
   const [statut, setStatut] = useState("Actif")
   const [temps, setTemps] = useState("35h")
+  const [
+  weeklyCycle,
+  setWeeklyCycle,
+] = useState<WeeklyCycleDay[]>(
+  createEmptyWeeklyCycle()
+)
 
   const [posteId, setPosteId] = useState("")
   const [serviceId, setServiceId] = useState("")
@@ -196,6 +214,8 @@ const [activeTab, setActiveTab] =
   const [saving, setSaving] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
   const [successMessage, setSuccessMessage] = useState("")
+  const [estPolyvalent, setEstPolyvalent] =
+  useState(false)
 
   const selectedPoste = useMemo(
     () =>
@@ -231,14 +251,16 @@ const [activeTab, setActiveTab] =
       setErrorMessage("")
 
       const [
-        postesResult,
-        servicesResult,
-        sitesResult,
-        agentResult,
-        coordonneesResult,
-        absencesResult,
-        planningResult,
-      ] = await Promise.all([
+  postesResult,
+  servicesResult,
+  sitesResult,
+  agentResult,
+  coordonneesResult,
+  absencesResult,
+  planningResult,
+  weeklyCycleResult,
+] = await Promise.all([
+
         supabase
           .from("postes")
           .select("id, nom")
@@ -323,18 +345,30 @@ const [activeTab, setActiveTab] =
           .eq("agent_id", id)
           .order("date", { ascending: false })
           .limit(20),
+
+          supabase
+  .from("agent_cycle_hebdomadaire")
+  .select(`
+    jour_semaine,
+    actif,
+    heure_debut,
+    heure_fin
+      `)
+  .eq("agent_id", Number(id))
+  .order("jour_semaine", { ascending: true }),
       ])
 
       if (!isMounted) return
 
       const firstError =
-        postesResult.error ||
-        servicesResult.error ||
-        sitesResult.error ||
-        agentResult.error ||
-        coordonneesResult.error ||
-        absencesResult.error ||
-        planningResult.error
+  postesResult.error ||
+  servicesResult.error ||
+  sitesResult.error ||
+  agentResult.error ||
+  coordonneesResult.error ||
+  absencesResult.error ||
+  planningResult.error ||
+  weeklyCycleResult.error
 
       if (firstError || !agentResult.data) {
         setErrorMessage(
@@ -373,6 +407,77 @@ const [activeTab, setActiveTab] =
 
       hydrateAgentFields(loadedAgent)
       hydrateCoordinatesFields(loadedCoordonnees)
+
+      const weeklyCycleData =
+  (
+    weeklyCycleResult.data ?? []
+  ) as unknown as WeeklyCycleDbRow[]
+
+if (
+  weeklyCycleData.length > 0
+) {
+  const emptyCycle =
+    createEmptyWeeklyCycle()
+
+  const loadedCycle =
+    emptyCycle.map(
+      (defaultDay) => {
+        const dayRows =
+          weeklyCycleData.filter(
+            (row) =>
+              Number(
+                row.jour_semaine
+              ) ===
+                defaultDay.jour &&
+              row.actif === true
+          )
+
+        const first =
+          dayRows[0]
+
+        const second =
+          dayRows[1]
+
+        return {
+          jour:
+            defaultDay.jour,
+
+          actif:
+            dayRows.length > 0,
+
+          heure_debut_matin:
+            first?.heure_debut
+              ?.slice(0, 5) ??
+            "",
+
+          heure_fin_matin:
+            first?.heure_fin
+              ?.slice(0, 5) ??
+            "",
+
+          heure_debut_apres_midi:
+            second?.heure_debut
+              ?.slice(0, 5) ??
+            "",
+
+          heure_fin_apres_midi:
+            second?.heure_fin
+              ?.slice(0, 5) ??
+            "",
+        }
+      }
+    )
+
+  setWeeklyCycle(
+    loadedCycle
+  )
+} else {
+  setWeeklyCycle(
+    createEmptyWeeklyCycle()
+  )
+}
+      
+
 
       setAbsences(
         (absencesResult.data || []) as AbsenceItem[]
@@ -451,6 +556,10 @@ const [activeTab, setActiveTab] =
         : ""
     )
 
+    setEstPolyvalent(
+  loadedAgent.est_polyvalent === true
+)
+
     setServiceId(
       loadedAgent.service_id
         ? String(loadedAgent.service_id)
@@ -524,38 +633,144 @@ const [activeTab, setActiveTab] =
           String(service.id) === serviceId
       )?.nom || null
 
-    const {
-      data: updatedAgent,
-      error: agentError,
-    } = await supabase
-      .from("agents")
-      .update({
-        nom: trimmedName,
-        statut,
-        temps,
-        service: selectedServiceName,
-        poste_id: posteId
-          ? Number(posteId)
-          : null,
-        service_id: serviceId
-          ? Number(serviceId)
-          : null,
-        site_id: siteId
-          ? Number(siteId)
-          : null,
-      })
-      .eq("id", Number(id))
-      .select("*")
-      .single()
+   const {
+  data: updatedAgents,
+  error: agentError,
+} = await supabase
+  .from("agents")
+.update({
+  nom: trimmedName,
+  statut,
+  temps,
+  service: selectedServiceName,
 
-    if (agentError || !updatedAgent) {
-      setErrorMessage(
-        agentError?.message ||
-          "Impossible de modifier l’agent."
-      )
-      setSaving(false)
-      return
+  poste_id: posteId
+    ? Number(posteId)
+    : null,
+
+  service_id: serviceId
+    ? Number(serviceId)
+    : null,
+
+  site_id: siteId
+    ? Number(siteId)
+    : null,
+
+  est_polyvalent: estPolyvalent,
+})
+  .eq("id", Number(id))
+  .select("*")
+
+const updatedAgent =
+  updatedAgents?.[0] ?? null
+
+if (
+  agentError ||
+  !updatedAgent
+) {
+  setErrorMessage(
+    agentError?.message ||
+      "La fiche n’a pas pu être modifiée. Vérifiez les droits de modification de cet agent."
+  )
+
+  setSaving(false)
+  return
+}
+
+   
+    const cyclePayload =
+  weeklyCycle.flatMap(
+    (day) => {
+      if (!day.actif) {
+        return []
+      }
+
+      const rows = []
+
+      /*
+       * Matin
+       */
+      if (
+        day.heure_debut_matin &&
+        day.heure_fin_matin
+      ) {
+        rows.push({
+          agent_id:
+            Number(id),
+
+          jour_semaine:
+            day.jour,
+
+          heure_debut:
+            day.heure_debut_matin,
+
+          heure_fin:
+            day.heure_fin_matin,
+
+          actif:
+            true,
+        })
+      }
+
+      /*
+       * Après-midi
+       */
+      if (
+        day.heure_debut_apres_midi &&
+        day.heure_fin_apres_midi
+      ) {
+        rows.push({
+          agent_id:
+            Number(id),
+
+          jour_semaine:
+            day.jour,
+
+          heure_debut:
+            day.heure_debut_apres_midi,
+
+          heure_fin:
+            day.heure_fin_apres_midi,
+
+          actif:
+            true,
+        })
+      }
+
+      return rows
     }
+  )
+
+const {
+  error: cycleDeleteError,
+} = await supabase
+  .from("agent_cycle_hebdomadaire")
+  .delete()
+  .eq("agent_id", Number(id))
+
+if (cycleDeleteError) {
+  setErrorMessage(
+    `L’agent a été modifié, mais son cycle hebdomadaire n’a pas pu être mis à jour : ${cycleDeleteError.message}`
+  )
+  setSaving(false)
+  return
+}
+
+if (cyclePayload.length > 0) {
+  const {
+    error: cycleInsertError,
+  } = await supabase
+    .from("agent_cycle_hebdomadaire")
+    .insert(cyclePayload)
+
+  if (cycleInsertError) {
+    setErrorMessage(
+      `L’agent a été modifié, mais son cycle hebdomadaire n’a pas pu être enregistré : ${cycleInsertError.message}`
+    )
+    setSaving(false)
+    return
+  }
+}
 
     const coordonneesPayload = {
       agent_id: Number(id),
@@ -899,6 +1114,7 @@ const [activeTab, setActiveTab] =
             nom={nom}
             statut={statut}
             temps={temps}
+            weeklyCycle={weeklyCycle}
             siteId={siteId}
             serviceId={serviceId}
             posteId={posteId}
@@ -921,6 +1137,7 @@ const [activeTab, setActiveTab] =
             onNomChange={setNom}
             onStatutChange={setStatut}
             onTempsChange={setTemps}
+            onWeeklyCycleChange={setWeeklyCycle}
             onSiteChange={setSiteId}
             onServiceChange={setServiceId}
             onPosteChange={setPosteId}
@@ -941,6 +1158,8 @@ const [activeTab, setActiveTab] =
               setTelephoneUrgence
             }
             onSave={() => void modifierAgent()}
+            estPolyvalent={estPolyvalent}
+onEstPolyvalentChange={setEstPolyvalent}
           />
         ) : (
           <>

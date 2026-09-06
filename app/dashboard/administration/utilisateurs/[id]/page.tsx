@@ -88,6 +88,14 @@ const data =
     (user) => user.id === userId
   ) ?? null
 
+  const additionalSitesResponse =
+  await fetch(
+    `/api/admin/users/${userId}/sites`,
+    {
+      cache: "no-store",
+    }
+  )
+
         if (!active) {
           return
         }
@@ -121,6 +129,8 @@ const data =
     }
   }, [userId])
 
+  
+
   /*
    * ==========================================
    * ENREGISTREMENT
@@ -138,10 +148,20 @@ const data =
       setSubmitting(true)
       setErrorMessage("")
 
+     console.log("UPDATE USER PAYLOAD", {
+  id: profile.id,
+  email: values.email,
+  login_identifier: values.login_identifier,
+}) 
+
       await AdminUsersApi.update({
   id: profile.id,
 
-  email: values.email,
+  
+  contact_email:
+  values.contact_email || null,
+ login_identifier:
+  values.login_identifier || null, 
   nom: values.nom || null,
   prenom: values.prenom || null,
   telephone: values.telephone || null,
@@ -160,6 +180,9 @@ const data =
 
   service_id:
     values.service_id || null,
+
+  additional_site_ids:
+  values.additional_site_ids ?? [],
 
   actif: values.actif,
 })
@@ -287,50 +310,66 @@ const data =
         )}
 
         <UserForm
-          initialValues={{
-            nom:
-              profile.nom ?? "",
+  key={profile.id}
+  initialValues={{
+    nom: profile.nom ?? "",
+    prenom: profile.prenom ?? "",
+    email: profile.email,
 
-            prenom:
-              profile.prenom ?? "",
+    contact_email:
+      profile.contact_email ?? "",
 
-            email:
-              profile.email,
+    telephone:
+      profile.telephone ?? "",
 
-            telephone:
-              profile.telephone ?? "",
+    fonction:
+      profile.fonction ?? "",
 
-            fonction:
-              profile.fonction ?? "",
+    role:
+      profile.role,
 
-            role:
-              profile.role,
+    custom_role_id:
+      profile.custom_role_id,
 
-            custom_role_id:
-              profile.custom_role_id,
+    actif:
+      profile.actif,
 
-            actif:
-              profile.actif,
+    structure_id:
+      profile.structure_id !== null
+        ? String(profile.structure_id)
+        : "",
 
-           structure_id:
-  profile.structure_id !== null
-    ? String(profile.structure_id)
-    : "",
+    site_id:
+      profile.site_id !== null
+        ? String(profile.site_id)
+        : "",
 
-site_id:
-  profile.site_id !== null
-    ? String(profile.site_id)
-    : "",
+    service_id:
+      profile.service_id !== null
+        ? String(profile.service_id)
+        : "",
 
-service_id:
-  profile.service_id !== null
-    ? String(profile.service_id)
-    : "",
-          }}
-          submitting={submitting}
-          submitLabel="Enregistrer les modifications"
-          onSubmit={handleSubmit}
-        />
+    additional_site_ids:
+      (
+        profile.responsable_site_affectations ??
+        []
+      )
+        .filter(
+          (affectation) =>
+            affectation.actif === true &&
+            affectation.principal !== true
+        )
+        .map(
+          (affectation) =>
+            String(
+              affectation.site_id
+            )
+        ),
+  }}
+  submitting={submitting}
+  submitLabel="Enregistrer les modifications"
+  onSubmit={handleSubmit}
+/>
       </div>
     </main>
   )

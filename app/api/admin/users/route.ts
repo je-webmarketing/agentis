@@ -13,6 +13,9 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
+  const debugBody = await request.clone().json()
+
+ 
   return UserController.update(request)
 }
 

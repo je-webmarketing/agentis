@@ -398,24 +398,46 @@ export default function MoveAssignmentDialog({
     const targetAssignedAfter =
       targetAssignedBefore + 1
 
-    const sourceMissingBefore = Math.max(
-      0,
-      sourceExpected - sourceAssignedBefore
-    )
+    const sourceExpectedTotal =
+  typeof sourceExpected === "number"
+    ? sourceExpected
+    : Object.values(
+        sourceExpected || {}
+      ).reduce(
+        (total, value) =>
+          total + (Number(value) || 0),
+        0
+      )
 
-    const sourceMissingAfter = Math.max(
-      0,
-      sourceExpected - sourceAssignedAfter
-    )
+   const sourceMissingBefore = Math.max(
+  0,
+  sourceExpectedTotal - sourceAssignedBefore
+)
+
+   const sourceMissingAfter = Math.max(
+  0,
+  sourceExpectedTotal - sourceAssignedAfter
+)
+
+const targetExpectedTotal =
+  typeof targetExpected === "number"
+    ? targetExpected
+    : Object.values(
+        targetExpected || {}
+      ).reduce(
+        (total, value) =>
+          total + (Number(value) || 0),
+        0
+      )
 
     const targetMissingBefore = Math.max(
       0,
-      targetExpected - targetAssignedBefore
+      targetExpectedTotal - targetAssignedBefore
     )
 
     const targetMissingAfter = Math.max(
       0,
-      targetExpected - targetAssignedAfter
+      targetExpectedTotal - targetAssignedAfter
     )
 
     const missingBefore =

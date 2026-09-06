@@ -1,20 +1,26 @@
 import { supabase } from "@/lib/supabase"
+
 import type {
   ProfileRecord,
   ProfileRole,
 } from "@/lib/services/ProfileService"
 
 export type CreateAdminUserPayload = {
-  email: string
+  email?: string | null
+  contact_email?: string | null
+login_identifier?: string | null
   nom?: string | null
   prenom?: string | null
   telephone?: string | null
   fonction?: string | null
+
   role?: ProfileRole
   custom_role_id?: number | null
+
   structure_id?: string | number | null
   site_id?: string | number | null
   service_id?: string | number | null
+
   actif?: boolean
   redirectTo?: string
 }
@@ -22,7 +28,20 @@ export type CreateAdminUserPayload = {
 export type UpdateAdminUserPayload =
   Partial<CreateAdminUserPayload> & {
     id: string
+    contact_email?: string | null
+    additional_site_ids?: Array<string | number>
   }
+
+type ApiSuccess<T> = {
+  ok: true
+  data: T
+}
+
+type ApiError = {
+  ok?: false
+  error?: string
+  message?: string
+}
 
 async function getAccessToken() {
   const {
@@ -34,85 +53,79 @@ async function getAccessToken() {
     throw error
   }
 
-  if (!session?.access_token) {
+  const accessToken =
+    session?.access_token
+
+  if (!accessToken) {
     throw new Error(
-      "Vous devez être connecté pour administrer les utilisateurs."
+      "Session administrateur introuvable."
     )
   }
 
-  return session.access_token
+  return accessToken
 }
 
-async function request<T>(
+async function apiRequest<T>(
   url: string,
-  init: RequestInit
+  options: RequestInit = {}
 ): Promise<T> {
-  const accessToken = await getAccessToken()
+  const accessToken =
+    await getAccessToken()
 
-  const response = await fetch(url, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${accessToken}`,
-      ...(init.headers || {}),
-    },
-  })
+  const response = await fetch(
+    url,
+    {
+      ...options,
 
-  const rawText = await response.text()
+      headers: {
+        "Content-Type":
+          "application/json",
 
-  let payload: any = null
+        Authorization:
+          `Bearer ${accessToken}`,
 
-  try {
-    payload = rawText
-      ? JSON.parse(rawText)
-      : null
-  } catch {
-    payload = null
-  }
-
-  if (!response.ok || payload?.ok !== true) {
-    console.warn(
-  "ADMIN USERS API ERROR\n" +
-    JSON.stringify(
-      {
-        status: response.status,
-        statusText: response.statusText,
-        url,
-        rawText,
-        payload,
+        ...options.headers,
       },
-      null,
-      2
-    )
-)
-
-    let message =
-      payload?.error ||
-      payload?.message ||
-      rawText ||
-      `Erreur HTTP ${response.status} ${response.statusText}`
-
-    if (
-      typeof message === "object"
-    ) {
-      message = JSON.stringify(
-        message,
-        null,
-        2
-      )
     }
+  )
 
-    throw new Error(
-      String(message)
-    )
+  const result =
+    (await response.json()) as
+      | ApiSuccess<T>
+      | ApiError
+
+  if (
+    !response.ok ||
+    !("ok" in result) ||
+    result.ok !== true
+  ) {
+    const message =
+      "error" in result &&
+      typeof result.error === "string"
+        ? result.error
+        : "message" in result &&
+            typeof result.message === "string"
+          ? result.message
+          : "Une erreur est survenue."
+
+    throw new Error(message)
   }
 
-  return payload.data as T
+  return result.data
 }
 
 export const AdminUsersApi = {
-  async list(): Promise<ProfileRecord[]> {
-    return request<ProfileRecord[]>(
+  /*
+   * =====================================================
+   * LISTE
+   * =====================================================
+   */
+
+  async list():
+    Promise<ProfileRecord[]> {
+    return apiRequest<
+      ProfileRecord[]
+    >(
       "/api/admin/users",
       {
         method: "GET",
@@ -120,29 +133,59 @@ export const AdminUsersApi = {
     )
   },
 
+  /*
+   * =====================================================
+   * CRÉATION
+   * =====================================================
+   */
+
   async create(
     payload: CreateAdminUserPayload
   ): Promise<ProfileRecord> {
-    return request<ProfileRecord>(
+    return apiRequest<
+      ProfileRecord
+    >(
       "/api/admin/users",
       {
         method: "POST",
-        body: JSON.stringify(payload),
+
+        body:
+          JSON.stringify(
+            payload
+          ),
       }
     )
   },
 
+  /*
+   * =====================================================
+   * MODIFICATION
+   * =====================================================
+   */
+
   async update(
     payload: UpdateAdminUserPayload
   ): Promise<ProfileRecord> {
-    return request<ProfileRecord>(
+    return apiRequest<
+      ProfileRecord
+    >(
       "/api/admin/users",
       {
         method: "PATCH",
-        body: JSON.stringify(payload),
+
+        body:
+          JSON.stringify(
+            payload
+          ),
       }
     )
   },
+
+  /*
+   * =====================================================
+   * SUPPRESSION
+   * =====================================================
+   */
 
   async delete(
     id: string
@@ -150,13 +193,18 @@ export const AdminUsersApi = {
     id: string
     deleted: boolean
   }> {
-    return request<{
+    return apiRequest<{
       id: string
       deleted: boolean
     }>(
-      `/api/admin/users?id=${encodeURIComponent(id)}`,
+      "/api/admin/users",
       {
         method: "DELETE",
+
+        body:
+          JSON.stringify({
+            id,
+          }),
       }
     )
   },

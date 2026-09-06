@@ -41,6 +41,7 @@ import type {
 export type UserFormValues =
   UserCreatePayload & {
     custom_role_id?: number | null
+    additional_site_ids?: string[]
   }
 
 type UserFormProps = {
@@ -132,6 +133,12 @@ export default function UserForm({
     email:
       initialValues.email || "",
 
+    contact_email:
+  initialValues.contact_email || "",
+
+  login_identifier:
+  initialValues.login_identifier || "",
+
     telephone:
       initialValues.telephone || "",
 
@@ -157,6 +164,14 @@ export default function UserForm({
     service_id:
       initialValues.service_id || "",
   })
+
+const [
+  additionalSiteIds,
+  setAdditionalSiteIds,
+] = useState<string[]>(
+  (initialValues.additional_site_ids ?? [])
+    .map((id) => String(id))
+)
 
   const [
     customRoles,
@@ -341,50 +356,62 @@ export default function UserForm({
   ) {
     event.preventDefault()
 
-    setErrorMessage("")
+   setErrorMessage("")
 
-    if (!values.email.trim()) {
-      setErrorMessage(
-        "L’adresse email est obligatoire."
-      )
-      return
-    }
+// Un responsable de site doit obligatoirement
+// être rattaché à un site.
+if (
+  values.role === "responsable_site" &&
+  !values.site_id
+) {
+  setErrorMessage(
+    "Veuillez sélectionner le site du responsable de site."
+  )
+  return
+}
 
-    if (
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
-        values.email.trim()
-      )
-    ) {
-      setErrorMessage(
-        "L’adresse email n’est pas valide."
-      )
-      return
-    }
+const normalizedContactEmail =
+  values.contact_email?.trim().toLowerCase() || ""
+
+if (
+  normalizedContactEmail &&
+  !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+    normalizedContactEmail
+  )
+) {
+  setErrorMessage(
+    "L’adresse email de contact n’est pas valide."
+  )
+  return
+}
 
     await onSubmit?.({
-      ...values,
+  ...values,
 
-      nom:
-        values.nom.trim(),
+  nom:
+    values.nom.trim(),
 
-      prenom:
-        values.prenom.trim(),
+  prenom:
+    values.prenom.trim(),
 
-      email:
-        values.email
-          .trim()
-          .toLowerCase(),
+  contact_email:
+    normalizedContactEmail || null,
 
-      telephone:
-        values.telephone.trim(),
+  telephone:
+    values.telephone.trim(),
 
-      fonction:
-        values.fonction.trim(),
+  fonction:
+    values.fonction.trim(),
 
-      custom_role_id:
-        values.custom_role_id ??
-        null,
-    })
+  custom_role_id:
+    values.custom_role_id ??
+    null,
+
+  additional_site_ids:
+    values.role === "responsable_site"
+      ? additionalSiteIds
+      : [],
+})
   }
 
   const selectedCustomRole =
@@ -473,29 +500,56 @@ export default function UserForm({
               placeholder="Eric"
             />
           </Field>
+         
+          <div>
+  <label
+    htmlFor="login_identifier"
+    className="mb-2 block text-sm font-semibold text-slate-900"
+  >
+    Identifiant de connexion AGENTIS
+  </label>
+
+  <input
+    id="login_identifier"
+    name="login_identifier"
+    type="text"
+    value={values.login_identifier ?? ""}
+    onChange={(event) =>
+      setValues((current) => ({
+        ...current,
+        login_identifier: event.target.value,
+      }))
+    }
+    placeholder="Ex. sarah.achab"
+    autoComplete="username"
+    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+  />
+
+  <p className="mt-2 text-xs text-slate-500">
+    Identifiant personnel utilisé pour se connecter à AGENTIS.
+  </p>
+</div>
 
           <Field
-            label="Email"
-            required
-            icon={
-              <Mail className="h-4 w-4" />
-            }
-          >
-            <input
-              type="email"
-              value={values.email}
-              disabled={submitting}
-              onChange={(event) =>
-                updateField(
-                  "email",
-                  event.target.value
-                )
-              }
-              className={inputClass}
-              placeholder="utilisateur@exemple.fr"
-              required
-            />
-          </Field>
+  label="Email de contact"
+  icon={
+    <Mail className="h-4 w-4" />
+  }
+>
+  <input
+    type="email"
+    value={values.contact_email ?? ""}
+    disabled={submitting}
+    onChange={(event) =>
+      updateField(
+        "contact_email",
+        event.target.value
+      )
+    }
+    className={inputClass}
+    placeholder="contact@exemple.fr"
+  />
+</Field>
 
           <Field
             label="Téléphone"
@@ -720,19 +774,26 @@ export default function UserForm({
       =================================================== */}
 
       <UserScopeFields
-        values={{
-          structure_id:
-            values.structure_id,
+  values={{
+    structure_id:
+      values.structure_id,
 
-          site_id:
-            values.site_id,
+    site_id:
+      values.site_id,
 
-          service_id:
-            values.service_id,
-        }}
-        disabled={submitting}
-        onChange={updateScope}
-      />
+    service_id:
+      values.service_id,
+  }}
+  role={values.role}
+  additionalSiteIds={
+    additionalSiteIds
+  }
+  disabled={submitting}
+  onChange={updateScope}
+  onAdditionalSitesChange={
+    setAdditionalSiteIds
+  }
+/>
 
       {/* ===================================================
           ACTION

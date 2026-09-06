@@ -5,6 +5,10 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 
 import AgentForm from "@/components/agentis/forms/AgentForm"
+import {
+  createEmptyWeeklyCycle,
+  type WeeklyCycleDay,
+} from "@/components/agentis/forms/AgentWeeklyCycleEditor"
 import { supabase } from "@/lib/supabase"
 
 type RefItem = {
@@ -49,6 +53,15 @@ export default function NewAgentPage() {
 
   const [saving, setSaving] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
+  const [estPolyvalent, setEstPolyvalent] =
+  useState(false)
+
+ const [
+  weeklyCycle,
+  setWeeklyCycle,
+] = useState<WeeklyCycleDay[]>(
+  createEmptyWeeklyCycle()
+)
 
   useEffect(() => {
     let isMounted = true
@@ -137,6 +150,7 @@ export default function NewAgentPage() {
         site_id: siteId
           ? Number(siteId)
           : null,
+        est_polyvalent: estPolyvalent,  
       })
       .select("id")
       .single()
@@ -243,6 +257,8 @@ export default function NewAgentPage() {
             nom={nom}
             statut={statut}
             temps={temps}
+             weeklyCycle={weeklyCycle}
+  onWeeklyCycleChange={setWeeklyCycle}
             siteId={siteId}
             serviceId={serviceId}
             posteId={posteId}
@@ -283,6 +299,8 @@ export default function NewAgentPage() {
               setTelephoneUrgence
             }
             onSave={() => void handleSave()}
+            estPolyvalent={estPolyvalent}
+onEstPolyvalentChange={setEstPolyvalent}
           />
         )}
       </div>

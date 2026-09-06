@@ -39,9 +39,6 @@ import {
 
 import { createClient } from "@/lib/supabase/client"
 
-import {
-  getRolePermissions,
-} from "@/lib/security/RolePermissions"
 
 import type {
   PermissionKey,
@@ -250,8 +247,14 @@ export default function AgentSidebar() {
   const pathname = usePathname()
   const router = useRouter()
 
-  const [userRole, setUserRole] =
-    useState<SecurityRoleKey | null>(null)
+ const [userRole, setUserRole] =
+  useState<SecurityRoleKey | null>(null)
+
+const [customRoleName, setCustomRoleName] =
+  useState<string | null>(null)
+
+ const [permissions, setPermissions] =
+  useState<PermissionKey[]>([]) 
 
   const [loadingRole, setLoadingRole] =
     useState(true)
@@ -278,97 +281,117 @@ export default function AgentSidebar() {
    * =======================================================
    */
 
-  useEffect(() => {
-    let mounted = true
+ useEffect(() => {
+  let mounted = true
 
-    async function loadUserRole() {
-      const supabase =
-        createClient()
+  async function loadSecurityContext() {
+    const supabase =
+      createClient()
 
-      try {
-        const {
-          data: { user },
-          error: userError,
-        } =
-          await supabase.auth.getUser()
+    try {
+      const {
+        data: { session },
+        error: sessionError,
+      } =
+        await supabase.auth.getSession()
 
-        if (
-          userError ||
-          !user
-        ) {
-          if (mounted) {
-            setUserRole(null)
-          }
+      if (sessionError) {
+        throw sessionError
+      }
 
-          return
-        }
-
-        const {
-          data: profile,
-          error: profileError,
-        } =
-          await supabase
-            .from("profiles")
-            .select(
-              "role, actif"
-            )
-            .eq(
-              "id",
-              user.id
-            )
-            .single()
-
-        if (
-          profileError ||
-          !profile ||
-          profile.actif !== true
-        ) {
-          if (mounted) {
-            setUserRole(null)
-          }
-
-          return
-        }
-
-        if (
-          isSecurityRole(
-            profile.role
-          )
-        ) {
-          if (mounted) {
-            setUserRole(
-              profile.role
-            )
-          }
-
-          return
-        }
-
+      if (!session?.access_token) {
         if (mounted) {
           setUserRole(null)
+          setCustomRoleName(null)
+          setPermissions([])
         }
-      } catch (error) {
-        console.error(
-          "Impossible de charger le rôle utilisateur :",
-          error
+
+        return
+      }
+
+      const response =
+        await fetch(
+          "/api/security/me",
+          {
+            headers: {
+              Authorization:
+                `Bearer ${session.access_token}`,
+            },
+            cache: "no-store",
+          }
         )
 
-        if (mounted) {
-          setUserRole(null)
-        }
-      } finally {
-        if (mounted) {
-          setLoadingRole(false)
-        }
+      const payload =
+        await response.json()
+
+      if (
+        !response.ok ||
+        payload?.ok !== true ||
+        !payload?.user
+      ) {
+        throw new Error(
+          payload?.error ||
+            "Impossible de charger le contexte de sécurité."
+        )
+      }
+
+      const securityUser =
+        payload.user
+
+      if (
+        !isSecurityRole(
+          securityUser.system_role
+        )
+      ) {
+        throw new Error(
+          "Rôle système invalide."
+        )
+      }
+
+      if (mounted) {
+        setUserRole(
+          securityUser.system_role
+        )
+
+        setCustomRoleName(
+          typeof securityUser.display_role ===
+            "string"
+            ? securityUser.display_role
+            : null
+        )
+
+        setPermissions(
+          Array.isArray(
+            securityUser.permissions
+          )
+            ? securityUser.permissions
+            : []
+        )
+      }
+    } catch (error) {
+      console.error(
+        "Impossible de charger le contexte de sécurité :",
+        error
+      )
+
+      if (mounted) {
+        setUserRole(null)
+        setCustomRoleName(null)
+        setPermissions([])
+      }
+    } finally {
+      if (mounted) {
+        setLoadingRole(false)
       }
     }
+  }
 
-    void loadUserRole()
+  void loadSecurityContext()
 
-    return () => {
-      mounted = false
-    }
-  }, [])
+  return () => {
+    mounted = false
+  }
+}, [])
 
   /*
    * =======================================================
@@ -376,16 +399,6 @@ export default function AgentSidebar() {
    * =======================================================
    */
 
-  const permissions =
-    useMemo<PermissionKey[]>(
-      () =>
-        userRole
-          ? getRolePermissions(
-              userRole
-            )
-          : [],
-      [userRole]
-    )
 
   function can(
     permission:
@@ -821,9 +834,10 @@ export default function AgentSidebar() {
             {!collapsed && (
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold text-slate-900">
-                  {getRoleLabel(
-                    userRole
-                  )}
+                 {getRoleLabel(
+  userRole ?? "",
+  customRoleName
+)}
                 </p>
 
                 <p className="mt-0.5 text-xs text-slate-500">
@@ -873,6 +887,10 @@ export default function AgentSidebar() {
               <span className="font-semibold text-amber-600">
                 JE-Webmarketing
               </span>
+              <br/>
+              <span className="font-semibold text-emerald-600">
+Optim'Avis Client
+  </span>
             </p>
           )}
         </div>
@@ -1002,10 +1020,13 @@ function isSecurityRole(
 }
 
 function getRoleLabel(
-  role:
-    | SecurityRoleKey
-    | null
+  role: string,
+  customRoleName?: string | null
 ) {
+  if (customRoleName) {
+    return customRoleName
+  }
+
   switch (role) {
     case "super_admin":
       return "Super administrateur"

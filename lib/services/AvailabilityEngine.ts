@@ -217,41 +217,56 @@ export const AvailabilityEngine = {
       return []
     }
 
-    const assignmentIds = assignments.map(
-      (assignment) => assignment.id
-    )
+   const assignmentIds = assignments.map(
+  (assignment) => assignment.id
+)
 
-    const { data: updatedRows, error: updateError } =
-      await supabase
-        .from("planning_journalier")
-        .update({
-          agent_initial_id: agentId,
-          agent_id: null,
-          est_poste_vacant: true,
-          statut: "Absent",
-          commentaire:
-            "Poste vacant suite à une absence validée",
-        })
-        .in("id", assignmentIds)
-        .eq("agent_id", agentId)
-        .select(
-          "id,date,site_id,service,heure_debut,heure_fin"
-        )
+const {
+  data: agentScope,
+  error: agentScopeError,
+} = await supabase
+  .from("agents")
+  .select("service_id")
+  .eq("id", agentId)
+  .single()
 
-    if (updateError) {
-      throw new Error(
-        `Impossible de libérer les affectations : ${updateError.message}`
-      )
-    }
+if (agentScopeError) {
+  throw new Error(
+    `Impossible de récupérer le service de l’agent : ${agentScopeError.message}`
+  )
+}
 
-    const releasedAssignments =
-      (updatedRows || []) as ReleasedAssignment[]
+const { error: updateError } =
+  await supabase
+    .from("planning_journalier")
+    .update({
+      agent_initial_id: agentId,
+      agent_id: null,
+      service_id:
+        agentScope?.service_id ?? null,
+      est_poste_vacant: true,
+      statut: "Absent",
+      commentaire:
+        "Poste vacant suite à une absence validée",
+    })
+    .in("id", assignmentIds)
+    .eq("agent_id", agentId)
 
-    if (releasedAssignments.length !== assignments.length) {
-      throw new Error(
-        `${assignments.length} affectation(s) devaient être libérées, mais ${releasedAssignments.length} seulement ont été mises à jour.`
-      )
-    }
+if (updateError) {
+  throw new Error(
+    `Impossible de libérer les affectations : ${updateError.message}`
+  )
+}
+
+    const releasedAssignments: ReleasedAssignment[] =
+  assignments.map((assignment) => ({
+    id: assignment.id,
+    date: assignment.date,
+    site_id: assignment.site_id,
+    service: assignment.service,
+    heure_debut: assignment.heure_debut,
+    heure_fin: assignment.heure_fin,
+  }))
 
     await Promise.all(
       assignments.map((assignment) =>

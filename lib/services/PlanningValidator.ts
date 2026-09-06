@@ -252,21 +252,44 @@ function hasTimeConflict(
   existingStart?: string | null,
   existingEnd?: string | null
 ) {
+  /*
+   * Si les deux affectations ont des horaires complets,
+   * on contrôle réellement leur chevauchement.
+   */
   if (
-    !newStart ||
-    !newEnd ||
-    !existingStart ||
-    !existingEnd
+    newStart &&
+    newEnd &&
+    existingStart &&
+    existingEnd
   ) {
-    return true
+    const startA = toMinutes(newStart)
+    const endA = toMinutes(newEnd)
+    const startB = toMinutes(existingStart)
+    const endB = toMinutes(existingEnd)
+
+    return startA < endB && startB < endA
   }
 
-  const startA = toMinutes(newStart)
-  const endA = toMinutes(newEnd)
-  const startB = toMinutes(existingStart)
-  const endB = toMinutes(existingEnd)
+  /*
+   * Si une affectation historique est incomplète
+   * (ex. 07:20 → NULL), on ne peut pas conclure
+   * automatiquement à un chevauchement.
+   *
+   * On bloque uniquement si les heures de début
+   * correspondent.
+   */
+  if (newStart && existingStart) {
+    return (
+      toMinutes(newStart) ===
+      toMinutes(existingStart)
+    )
+  }
 
-  return startA < endB && startB < endA
+  /*
+   * Pas assez d'informations pour démontrer
+   * un conflit horaire.
+   */
+  return false
 }
 
 function toMinutes(value: string) {

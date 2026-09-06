@@ -1,12 +1,15 @@
 import Link from "next/link"
 import {
   Activity,
+  BadgeCheck, 
   BookOpenCheck,
+  CloudDownload,
   DatabaseBackup,
   FileClock,
   KeyRound,
   LockKeyhole,
   Palette,
+  Scale,
   Settings,
   ShieldCheck,
   SlidersHorizontal,
@@ -23,7 +26,7 @@ const administrationCards = [
       "Créer, modifier, désactiver et rattacher les utilisateurs à leur périmètre.",
     href: "/dashboard/administration/utilisateurs",
     icon: UsersRound,
-    status: "À configurer",
+    status: "Opérationnel",
   },
   {
     title: "Rôles",
@@ -31,7 +34,7 @@ const administrationCards = [
       "Définir les profils d’accès : administrateur, RH, responsable de site et agent.",
     href: "/dashboard/administration/roles",
     icon: UserCog,
-    status: "À configurer",
+    status: "Opérationnel",
   },
   {
     title: "Permissions",
@@ -39,7 +42,7 @@ const administrationCards = [
       "Gérer les droits de lecture, création, modification, suppression et export.",
     href: "/dashboard/administration/permissions",
     icon: KeyRound,
-    status: "Socle prêt",
+    status: "Opérationnel",
   },
   {
     title: "Sécurité",
@@ -47,7 +50,7 @@ const administrationCards = [
       "Contrôler l’authentification, les accès sensibles et les politiques de protection.",
     href: "/dashboard/administration/securite",
     icon: LockKeyhole,
-    status: "Prioritaire",
+   status: "Opérationnel", 
   },
   {
     title: "Journaux",
@@ -55,7 +58,7 @@ const administrationCards = [
       "Consulter les connexions, modifications sensibles et événements de sécurité.",
     href: "/dashboard/administration/journaux",
     icon: FileClock,
-    status: "À venir",
+    status: "Opérationnel",
   },
   {
     title: "Paramètres",
@@ -63,7 +66,7 @@ const administrationCards = [
       "Configurer le fonctionnement général d’AGENTIS et les règles métier.",
     href: "/dashboard/administration/parametres",
     icon: Settings,
-    status: "À venir",
+  status: "Opérationnel",
   },
   {
     title: "Personnalisation",
@@ -71,7 +74,7 @@ const administrationCards = [
       "Choisir les cartes visibles, l’ordre des widgets et les préférences du dashboard.",
     href: "/dashboard/administration/personnalisation",
     icon: Palette,
-    status: "À venir",
+    status: "Opérationnel",
   },
   {
     title: "Sauvegardes",
@@ -79,8 +82,32 @@ const administrationCards = [
       "Préparer les sauvegardes, restaurations et contrôles d’intégrité.",
     href: "/dashboard/administration/sauvegardes",
     icon: DatabaseBackup,
-    status: "À venir",
+    status: "Opérationnel",
   },
+    {
+    title: "Données externes",
+    description:
+      "Connecter, synchroniser et contrôler les sources de données externes utilisées par AGENTIS.",
+    href: "/dashboard/administration/donnees-externes",
+    icon: CloudDownload,
+    status: "Opérationnel",
+  },
+  {
+  title: "Licence",
+  description:
+    "Gérer l’activation, la validité et les droits d’utilisation d’AGENTIS pour chaque structure cliente.",
+  href: "/dashboard/administration/licence",
+  icon: BadgeCheck,
+ status: "Opérationnel",
+},
+{
+  title: "Documents légaux",
+  description:
+    "Centraliser les mentions légales, politiques de confidentialité et autres documents réglementaires.",
+  href: "/dashboard/administration/documents-legaux",
+  icon: Scale,
+  status: "Opérationnel",
+},
 ]
 
 const quickActions = [
@@ -108,12 +135,8 @@ const quickActions = [
 
 function statusClass(status: string) {
   switch (status) {
-    case "Socle prêt":
+    case "Opérationnel":
       return "border-emerald-200 bg-emerald-50 text-emerald-700"
-    case "Prioritaire":
-      return "border-red-200 bg-red-50 text-red-700"
-    case "À configurer":
-      return "border-amber-200 bg-amber-50 text-amber-700"
     default:
       return "border-slate-200 bg-slate-50 text-slate-600"
   }
@@ -143,6 +166,44 @@ export default async function AdministrationPage() {
   ) {
     redirect("/dashboard")
   }
+
+  const [
+  usersResult,
+  rolesResult,
+  permissionsResult,
+] = await Promise.all([
+  supabase
+    .from("profiles")
+    .select("id", {
+      count: "exact",
+      head: true,
+    })
+    .eq("actif", true),
+
+  supabase
+    .from("security_roles")
+    .select("id", {
+      count: "exact",
+      head: true,
+    })
+    .eq("active", true),
+
+  supabase
+    .from("security_role_permissions")
+    .select("id", {
+      count: "exact",
+      head: true,
+    }),
+])
+
+const activeUsersCount =
+  usersResult.count ?? 0
+
+const activeRolesCount =
+  rolesResult.count ?? 0
+
+const permissionsCount =
+  permissionsResult.count ?? 0
 
   
   return (
@@ -182,12 +243,12 @@ export default async function AdministrationPage() {
 
               <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4">
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">
-                  Priorité actuelle
+                  État du système
                 </p>
 
                 <p className="mt-1 text-sm font-semibold text-amber-950">
-                  Sécurisation de la version déployée
-                </p>
+  Administration centralisée d’AGENTIS
+</p>
               </div>
             </div>
           </div>
@@ -195,32 +256,32 @@ export default async function AdministrationPage() {
 
         <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard
-            label="Utilisateurs"
-            value="0"
-            detail="Comptes à créer"
-            icon={<UsersRound className="h-5 w-5" />}
-          />
+  label="Utilisateurs"
+  value={String(activeUsersCount)}
+  detail="Comptes actifs"
+  icon={<UsersRound className="h-5 w-5" />}
+/>
 
-          <StatCard
-            label="Rôles"
-            value="6"
-            detail="Rôles de base prévus"
-            icon={<UserCog className="h-5 w-5" />}
-          />
+         <StatCard
+  label="Rôles"
+  value={String(activeRolesCount)}
+  detail="Rôles actifs"
+  icon={<UserCog className="h-5 w-5" />}
+/>
 
-          <StatCard
-            label="Permissions"
-            value="22"
-            detail="Modules référencés"
-            icon={<KeyRound className="h-5 w-5" />}
-          />
+         <StatCard
+  label="Permissions"
+  value={String(permissionsCount)}
+  detail="Permissions configurées"
+  icon={<KeyRound className="h-5 w-5" />}
+/>
 
-          <StatCard
-            label="Sécurité"
-            value="RLS"
-            detail="Audit en cours"
-            icon={<ShieldCheck className="h-5 w-5" />}
-          />
+         <StatCard
+  label="Sécurité"
+  value="RLS"
+  detail="Protection active"
+  icon={<ShieldCheck className="h-5 w-5" />}
+/>
         </section>
 
         <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
@@ -233,8 +294,8 @@ export default async function AdministrationPage() {
               </h2>
 
               <p className="mt-1 text-sm text-slate-600">
-                Accédez directement aux prochaines étapes du sprint Sécurité.
-              </p>
+  Accédez directement aux principales actions d’administration d’AGENTIS.
+</p>
             </div>
           </div>
 

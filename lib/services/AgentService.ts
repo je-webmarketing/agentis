@@ -283,6 +283,15 @@ export const AgentService = {
     return data ?? []
   },
 
+  async listPlanningCandidates() {
+  const { data, error } = await supabase
+    .rpc("planning_candidate_agents")
+
+  if (error) throw error
+
+  return data ?? []
+},
+
   async getById(id: string | number) {
     const { data, error } = await supabase
       .from("agents")
@@ -343,6 +352,8 @@ export const AgentService = {
         .select("*")
         .eq("agent_id", id),
     ])
+
+    
 
     const firstError =
       agentResult.error ||

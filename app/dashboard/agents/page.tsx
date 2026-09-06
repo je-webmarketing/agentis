@@ -1,4 +1,5 @@
 import Link from "next/link"
+
 import {
   BriefcaseBusiness,
   Building2,
@@ -15,9 +16,26 @@ import {
 import {
   createClient as createServerSupabaseClient,
 } from "@/lib/supabase/server"
+
 import DeleteAgentButton from "./delete-button"
-import { PermissionService } from "@/lib/security/PermissionService"
-import { createSecurityUser } from "@/lib/security/SecurityUserFactory"
+
+import {
+  PermissionService,
+} from "@/lib/security/PermissionService"
+
+import {
+  createSecurityUser,
+} from "@/lib/security/SecurityUserFactory"
+
+import {
+  getRolePermissions,
+} from "@/lib/security/RolePermissions"
+
+import type {
+  PermissionKey,
+  SecurityScopeType,
+} from "@/lib/security/types"
+
 import type {
   ProfileRecord,
 } from "@/lib/services/ProfileService"
@@ -33,10 +51,16 @@ type SearchParams = {
   statut?: string
 }
 
-type NamedRelation = {
-  id?: string | number | null
-  nom?: string | null
-  structure_id?: string | number | null
+type AgentAffectation = {
+  id: number
+  agent_id: number
+  site_id: number | null
+  service_id: number | null
+  poste_id: number | null
+  principal: boolean
+  actif: boolean
+  date_debut: string | null
+  date_fin: string | null
 }
 
 export default async function AgentsPage({
@@ -44,89 +68,249 @@ export default async function AgentsPage({
 }: {
   searchParams?: Promise<SearchParams>
 }) {
-  const params = await searchParams
+  const params =
+    await searchParams
 
   const supabase =
-  await createServerSupabaseClient()
+    await createServerSupabaseClient()
 
   const {
-  data: { user },
-} = await supabase.auth.getUser()
+    data: { user },
+  } =
+    await supabase.auth.getUser()
 
-let canCreate = false
-let canDelete = false
+  let canCreate = false
+  let canDelete = false
 
-if (user) {
-  const {
-    data: profileData,
-    error: profileError,
-  } = await supabase
-    .from("profiles")
-    .select(`
-      id,
-      email,
-      nom,
-      prenom,
-      telephone,
-      fonction,
-      role,
-      agent_id,
-      structure_id,
-      site_id,
-      service_id,
-      actif,
-      avatar_url,
-      derniere_connexion,
-      created_at,
-      updated_at
-    `)
-    .eq("id", user.id)
-    .single()
+  /*
+   * =====================================================
+   * PERMISSIONS UTILISATEUR CONNECTÉ
+   * =====================================================
+   */
 
-  if (
-    !profileError &&
-    profileData
-  ) {
-    const profile =
-      profileData as ProfileRecord
-
-    const securityUser =
-      createSecurityUser(profile)
-
-    canCreate =
-      PermissionService.has(
-        securityUser,
-        "agents.create"
+  if (user) {
+    const {
+      data: profileData,
+      error: profileError,
+    } = await supabase
+      .from("profiles")
+      .select(`
+        id,
+        email,
+        contact_email,
+        login_identifier,
+        nom,
+        prenom,
+        telephone,
+        fonction,
+        role,
+        custom_role_id,
+        agent_id,
+        structure_id,
+        site_id,
+        service_id,
+        actif,
+        avatar_url,
+        derniere_connexion,
+        created_at,
+        updated_at
+      `)
+      .eq(
+        "id",
+        user.id
       )
+      .single()
 
-    canDelete =
-      PermissionService.has(
-        securityUser,
-        "agents.delete"
-      )
+    if (
+      !profileError &&
+      profileData
+    ) {
+      const profile =
+        profileData as ProfileRecord
+
+      let permissions:
+        PermissionKey[] =
+        getRolePermissions(
+          profile.role
+        )
+
+      let customScopeType:
+        SecurityScopeType |
+        undefined
+
+      /*
+       * ---------------------------------------------
+       * RÔLE PERSONNALISÉ
+       * ---------------------------------------------
+       */
+
+      if (
+        profile.custom_role_id
+      ) {
+        const {
+          data: customRole,
+        } = await supabase
+          .from(
+            "security_roles"
+          )
+          .select(`
+            id,
+            base_role,
+            scope_type
+          `)
+          .eq(
+            "id",
+            profile.custom_role_id
+          )
+          .eq(
+            "active",
+            true
+          )
+          .maybeSingle()
+
+        if (customRole) {
+          const {
+            data:
+              permissionRows,
+          } = await supabase
+            .from(
+              "security_role_permissions"
+            )
+            .select(
+              "permission_key"
+            )
+            .eq(
+              "role_id",
+              customRole.id
+            )
+
+          const customPermissions =
+            (
+              permissionRows ??
+              []
+            ).map(
+              (row) =>
+                row.permission_key as
+                  PermissionKey
+            )
+
+          permissions =
+            customPermissions.length >
+            0
+              ? customPermissions
+              : getRolePermissions(
+                  customRole.base_role
+                )
+
+          customScopeType =
+            customRole.scope_type as
+              SecurityScopeType
+        }
+      }
+
+      const securityUser =
+        createSecurityUser(
+          profile,
+          permissions,
+          customScopeType
+        )
+
+      canCreate =
+        PermissionService.has(
+          securityUser,
+          "agents.create"
+        )
+
+      canDelete =
+        PermissionService.has(
+          securityUser,
+          "agents.delete"
+        )
+    }
   }
-}
 
-  const selectedStructure = params?.structure || ""
-  const selectedSite = params?.site || ""
-  const selectedService = params?.service || ""
-  const selectedStatus = params?.statut || ""
-  const searchAgent = params?.agent?.trim() || ""
+  /*
+   * =====================================================
+   * FILTRES
+   * =====================================================
+   */
+
+  const selectedStructure =
+    params?.structure || ""
+
+  const selectedSite =
+    params?.site || ""
+
+  const selectedService =
+    params?.service || ""
+
+  const selectedStatus =
+    params?.statut || ""
+
+  const searchAgent =
+    params?.agent?.trim() || ""
+
+  /*
+   * =====================================================
+   * CHARGEMENT DES DONNÉES
+   * =====================================================
+   */
 
   const [
     structuresResult,
     sitesResult,
+    servicesResult,
+    postesResult,
     agentsResult,
-  ] = await Promise.all([
+    affectationsResult,
+    ] = await Promise.all([
     supabase
       .from("structures")
-      .select("id, nom")
-      .order("nom", { ascending: true }),
+      .select(
+        "id, nom"
+      )
+      .order(
+        "nom",
+        {
+          ascending: true,
+        }
+      ),
 
     supabase
       .from("sites")
-      .select("id, nom, structure_id")
-      .order("nom", { ascending: true }),
+      .select(
+        "id, nom, structure_id"
+      )
+      .order(
+        "nom",
+        {
+          ascending: true,
+        }
+      ),
+
+    supabase
+      .from("services")
+      .select(
+        "id, nom"
+      )
+      .order(
+        "nom",
+        {
+          ascending: true,
+        }
+      ),
+
+    supabase
+      .from("postes")
+      .select(
+        "id, nom"
+      )
+      .order(
+        "nom",
+        {
+          ascending: true,
+        }
+      ),
 
     supabase
       .from("agents")
@@ -146,100 +330,371 @@ if (user) {
           structure_id
         )
       `)
-      .order("nom", { ascending: true }),
+      .order(
+        "nom",
+        {
+          ascending: true,
+        }
+      ),
+
+    supabase.rpc(
+      "get_visible_agent_affectations"
+    ),
+
+    
   ])
 
-  const structures = structuresResult.data || []
-  const sites = sitesResult.data || []
-  const agents = agentsResult.data || []
+  /*
+   * =====================================================
+   * DIAGNOSTIC TEMPORAIRE
+   *
+   * À lire dans le terminal npm run dev
+   * et NON dans la console Chrome.
+   * =====================================================
+   */
 
-  if (agentsResult.error) {
+ 
+
+  /*
+   * =====================================================
+   * GESTION DES ERREURS
+   * =====================================================
+   */
+
+  const firstError =
+    structuresResult.error ||
+    sitesResult.error ||
+    servicesResult.error ||
+    postesResult.error ||
+    agentsResult.error ||
+    affectationsResult.error
+
+  if (firstError) {
     return (
       <main className="min-h-screen bg-slate-50 p-8">
         <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">
-          Impossible de charger les agents :{" "}
-          {agentsResult.error.message}
+          Impossible de charger les données :
+          {" "}
+          {firstError.message}
         </div>
       </main>
     )
   }
 
-  const filteredSites = selectedStructure
-    ? sites.filter(
-        (site) =>
-          String(site.structure_id || "") ===
-          selectedStructure
-      )
-    : sites
+  /*
+   * =====================================================
+   * NORMALISATION
+   * =====================================================
+   */
 
-  const serviceNames = Array.from(
-    new Set(
-      agents
-        .map((agent) =>
-          getRelationName(
-            agent.service_ref,
-            agent.service || ""
-          )
+  const structures =
+    structuresResult.data || []
+
+  const sites =
+    sitesResult.data || []
+
+  const services =
+    servicesResult.data || []
+
+  const postes =
+    postesResult.data || []
+
+  const agents =
+    agentsResult.data || []
+
+  const affectations:
+    AgentAffectation[] =
+    (
+      affectationsResult.data ??
+      []
+    ) as AgentAffectation[]
+
+  /*
+   * =====================================================
+   * SITES DISPONIBLES SELON STRUCTURE
+   * =====================================================
+   */
+
+  const filteredSites =
+    selectedStructure
+      ? sites.filter(
+          (site) =>
+            String(
+              site.structure_id ??
+              ""
+            ) ===
+            selectedStructure
         )
-        .filter(Boolean)
+      : sites
+
+  /*
+   * =====================================================
+   * SERVICES DISPONIBLES
+   * =====================================================
+   */
+
+  const serviceNames =
+    services
+      .map(
+        (service) =>
+          service.nom
+      )
+      .filter(
+        (
+          name
+        ): name is string =>
+          Boolean(name)
+      )
+      .sort(
+        (a, b) =>
+          a.localeCompare(
+            b,
+            "fr"
+          )
+      )
+
+  /*
+   * =====================================================
+   * CONSTRUCTION DES LIGNES
+   *
+   * Le RPC get_visible_agent_affectations
+   * est désormais la source de vérité.
+   *
+   * Il renvoie :
+   *
+   * - affectations principales
+   * - affectations complémentaires
+   *
+   * déjà filtrées selon le périmètre autorisé.
+   * =====================================================
+   */
+
+  const displayRows =
+    affectations
+      .map(
+        (affectation) => {
+          const agent =
+            agents.find(
+              (agentItem) =>
+                String(
+                  agentItem.id
+                ) ===
+                String(
+                  affectation.agent_id
+                )
+            )
+
+          /*
+           * Si la RLS agents
+           * ne permet pas de lire
+           * l'agent correspondant,
+           * on ne peut pas fabriquer
+           * la ligne.
+           */
+          if (!agent) {
+            return null
+          }
+
+          const agentStatus =
+            String(
+              agent.statut ||
+              ""
+            ).trim()
+
+          const matchStatus =
+            selectedStatus
+              ? agentStatus ===
+                selectedStatus
+              : true
+
+          const matchAgent =
+            searchAgent
+              ? String(
+                  agent.nom ||
+                  ""
+                )
+                  .toLowerCase()
+                  .includes(
+                    searchAgent
+                      .toLowerCase()
+                  )
+              : true
+
+          if (
+            !matchStatus ||
+            !matchAgent
+          ) {
+            return null
+          }
+
+          const site =
+            sites.find(
+              (siteItem) =>
+                String(
+                  siteItem.id
+                ) ===
+                String(
+                  affectation.site_id
+                )
+            )
+
+          const service =
+            services.find(
+              (
+                serviceItem
+              ) =>
+                String(
+                  serviceItem.id
+                ) ===
+                String(
+                  affectation.service_id
+                )
+            )
+
+          const poste =
+            postes.find(
+              (posteItem) =>
+                String(
+                  posteItem.id
+                ) ===
+                String(
+                  affectation.poste_id
+                )
+            )
+
+          return {
+            key:
+              affectation.principal
+                ? `principal-${agent.id}`
+                : `affectation-${affectation.id}`,
+
+            agent,
+
+            siteId:
+              affectation.site_id,
+
+            structureId:
+              site
+                ?.structure_id ??
+              null,
+
+            siteName:
+              site?.nom ??
+              "Non renseigné",
+
+            serviceName:
+              service?.nom ??
+              "Non renseigné",
+
+            posteName:
+              poste?.nom ??
+              "Non renseigné",
+
+            principal:
+              affectation.principal ===
+              true,
+          }
+        }
+      )
+      .filter(
+        (
+          row
+        ): row is NonNullable<
+          typeof row
+        > =>
+          row !== null
+      )
+
+  /*
+   * =====================================================
+   * FILTRAGE DES AFFECTATIONS
+   *
+   * Site + Service doivent appartenir
+   * à la même affectation.
+   * =====================================================
+   */
+
+  const filteredRows =
+    displayRows.filter(
+      (row) => {
+        const matchStructure =
+          selectedStructure
+            ? String(
+                row.structureId ??
+                ""
+              ) ===
+              selectedStructure
+            : true
+
+        const matchSite =
+          selectedSite
+            ? String(
+                row.siteId ??
+                ""
+              ) ===
+              selectedSite
+            : true
+
+        const matchService =
+          selectedService
+            ? row.serviceName ===
+              selectedService
+            : true
+
+        return (
+          matchStructure &&
+          matchSite &&
+          matchService
+        )
+      }
     )
-  ).sort((a, b) => a.localeCompare(b, "fr"))
 
-  const filteredAgents = agents.filter((agent) => {
-    const site = getRelation(agent.site)
+  /*
+   * =====================================================
+   * AGENTS UNIQUES POUR LES COMPTEURS
+   * =====================================================
+   */
 
-    const agentServiceName = getRelationName(
-      agent.service_ref,
-      agent.service || ""
+  const filteredAgents =
+    Array.from(
+      new Map(
+        filteredRows.map(
+          (row) => [
+            String(
+              row.agent.id
+            ),
+            row.agent,
+          ]
+        )
+      ).values()
     )
 
-    const agentStatus =
-      String(agent.statut || "").trim()
-
-    const matchStructure = selectedStructure
-      ? String(site?.structure_id || "") ===
-        selectedStructure
-      : true
-
-    const matchSite = selectedSite
-      ? String(site?.id || "") === selectedSite
-      : true
-
-    const matchService = selectedService
-      ? agentServiceName === selectedService
-      : true
-
-    const matchStatus = selectedStatus
-      ? agentStatus === selectedStatus
-      : true
-
-    const matchAgent = searchAgent
-      ? String(agent.nom || "")
-          .toLowerCase()
-          .includes(searchAgent.toLowerCase())
-      : true
-
-    return (
-      matchStructure &&
-      matchSite &&
-      matchService &&
-      matchStatus &&
-      matchAgent
-    )
-  })
-
-  const activeAgents = filteredAgents.filter(
-    (agent) =>
-      normalizeStatus(agent.statut) === "actif"
-  ).length
+  const activeAgents =
+    filteredAgents.filter(
+      (agent) =>
+        normalizeStatus(
+          agent.statut
+        ) === "actif"
+    ).length
 
   const inactiveAgents =
-    filteredAgents.length - activeAgents
+    filteredAgents.length -
+    activeAgents
+
+  /*
+   * =====================================================
+   * AFFICHAGE
+   * =====================================================
+   */
 
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-8 text-slate-900 lg:px-8">
       <div className="mx-auto w-full max-w-[1800px]">
-        {/* En-tête */}
+
+        {/* =================================================
+            EN-TÊTE
+        ================================================= */}
+
         <header className="flex flex-col gap-5 border-b border-slate-200 pb-7 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.22em] text-amber-600">
@@ -257,44 +712,62 @@ if (user) {
           </div>
 
           {canCreate && (
-  <Link
-    href="/dashboard/agents/new"
-    className="inline-flex w-fit items-center gap-2 rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-semibold text-slate-950 shadow-sm transition hover:bg-amber-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
-  >
-    <Plus className="h-4 w-4" />
-    Ajouter un agent
-  </Link>
-)}
+            <Link
+              href="/dashboard/agents/new"
+              className="inline-flex w-fit items-center gap-2 rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-semibold text-slate-950 shadow-sm transition hover:bg-amber-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+            >
+              <Plus className="h-4 w-4" />
+              Ajouter un agent
+            </Link>
+          )}
         </header>
 
-        {/* Indicateurs */}
+        {/* =================================================
+            INDICATEURS
+        ================================================= */}
+
         <section className="mt-7 grid gap-4 sm:grid-cols-3">
           <StatCard
             label="Agents affichés"
-            value={filteredAgents.length}
-            icon={UsersRound}
+            value={
+              filteredAgents.length
+            }
+            icon={
+              UsersRound
+            }
             color="text-blue-600"
             background="bg-blue-50"
           />
 
           <StatCard
             label="Agents actifs"
-            value={activeAgents}
-            icon={UserCheck}
+            value={
+              activeAgents
+            }
+            icon={
+              UserCheck
+            }
             color="text-emerald-600"
             background="bg-emerald-50"
           />
 
           <StatCard
             label="Autres statuts"
-            value={inactiveAgents}
-            icon={UserX}
+            value={
+              inactiveAgents
+            }
+            icon={
+              UserX
+            }
             color="text-rose-600"
             background="bg-rose-50"
           />
         </section>
 
-        {/* Filtres */}
+        {/* =================================================
+            FILTRES
+        ================================================= */}
+
         <section className="mt-7 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="flex items-center gap-3 border-b border-slate-200 px-5 py-4">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
@@ -313,74 +786,116 @@ if (user) {
           </div>
 
           <form className="grid gap-4 p-5 md:grid-cols-2 xl:grid-cols-6">
+
             <FilterSelect
               label="Structure"
               name="structure"
-              defaultValue={selectedStructure}
+              defaultValue={
+                selectedStructure
+              }
             >
               <option value="">
                 Toutes les structures
               </option>
 
-              {structures.map((structure) => (
-                <option
-                  key={structure.id}
-                  value={structure.id}
-                >
-                  {structure.nom}
-                </option>
-              ))}
+              {structures.map(
+                (structure) => (
+                  <option
+                    key={
+                      structure.id
+                    }
+                    value={
+                      structure.id
+                    }
+                  >
+                    {
+                      structure.nom
+                    }
+                  </option>
+                )
+              )}
             </FilterSelect>
 
             <FilterSelect
               label="Site"
               name="site"
-              defaultValue={selectedSite}
+              defaultValue={
+                selectedSite
+              }
             >
               <option value="">
                 Tous les sites
               </option>
 
-              {filteredSites.map((site) => (
-                <option
-                  key={site.id}
-                  value={site.id}
-                >
-                  {site.nom}
-                </option>
-              ))}
+              {filteredSites.map(
+                (site) => (
+                  <option
+                    key={
+                      site.id
+                    }
+                    value={
+                      site.id
+                    }
+                  >
+                    {
+                      site.nom
+                    }
+                  </option>
+                )
+              )}
             </FilterSelect>
 
             <FilterSelect
               label="Service"
               name="service"
-              defaultValue={selectedService}
+              defaultValue={
+                selectedService
+              }
             >
               <option value="">
                 Tous les services
               </option>
 
-              {serviceNames.map((service) => (
-                <option
-                  key={service}
-                  value={service}
-                >
-                  {service}
-                </option>
-              ))}
+              {serviceNames.map(
+                (service) => (
+                  <option
+                    key={
+                      service
+                    }
+                    value={
+                      service
+                    }
+                  >
+                    {
+                      service
+                    }
+                  </option>
+                )
+              )}
             </FilterSelect>
 
             <FilterSelect
               label="Statut"
               name="statut"
-              defaultValue={selectedStatus}
+              defaultValue={
+                selectedStatus
+              }
             >
               <option value="">
                 Tous les statuts
               </option>
-              <option value="Actif">Actif</option>
-              <option value="Inactif">Inactif</option>
-              <option value="Archivé">Archivé</option>
+
+              <option value="Actif">
+                Actif
+              </option>
+
+              <option value="Inactif">
+                Inactif
+              </option>
+
+              <option value="Archivé">
+                Archivé
+              </option>
             </FilterSelect>
 
             <label className="xl:col-span-2">
@@ -394,7 +909,9 @@ if (user) {
                 <input
                   type="search"
                   name="agent"
-                  defaultValue={searchAgent}
+                  defaultValue={
+                    searchAgent
+                  }
                   placeholder="Nom de l’agent…"
                   className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-3 text-sm text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-400/15"
                 />
@@ -421,7 +938,10 @@ if (user) {
           </form>
         </section>
 
-        {/* Liste */}
+        {/* =================================================
+            LISTE DES AFFECTATIONS
+        ================================================= */}
+
         <section className="mt-7 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
             <div>
@@ -430,13 +950,22 @@ if (user) {
               </h2>
 
               <p className="mt-1 text-xs text-slate-500">
-                {filteredAgents.length} résultat
-                {filteredAgents.length > 1 ? "s" : ""}
+                {
+                  filteredRows.length
+                }{" "}
+                affectation
+                {
+                  filteredRows.length >
+                  1
+                    ? "s"
+                    : ""
+                }
               </p>
             </div>
           </div>
 
-          {filteredAgents.length === 0 ? (
+          {filteredRows.length ===
+          0 ? (
             <div className="flex min-h-64 flex-col items-center justify-center px-6 text-center">
               <UsersRound className="h-10 w-10 text-slate-300" />
 
@@ -445,8 +974,7 @@ if (user) {
               </p>
 
               <p className="mt-1 text-sm text-slate-500">
-                Modifiez les filtres ou ajoutez un
-                nouvel agent.
+                Modifiez les filtres ou ajoutez un nouvel agent.
               </p>
             </div>
           ) : (
@@ -457,21 +985,27 @@ if (user) {
                     <th className="px-5 py-3 text-left font-semibold">
                       Agent
                     </th>
+
                     <th className="px-5 py-3 text-left font-semibold">
                       Site
                     </th>
+
                     <th className="px-5 py-3 text-left font-semibold">
                       Service
                     </th>
+
                     <th className="px-5 py-3 text-left font-semibold">
                       Poste
                     </th>
+
                     <th className="px-5 py-3 text-left font-semibold">
                       Statut
                     </th>
+
                     <th className="px-5 py-3 text-left font-semibold">
                       Temps
                     </th>
+
                     <th className="px-5 py-3 text-right font-semibold">
                       Actions
                     </th>
@@ -479,99 +1013,111 @@ if (user) {
                 </thead>
 
                 <tbody className="divide-y divide-slate-100">
-                  {filteredAgents.map((agent) => {
-                    const siteName = getRelationName(
-                      agent.site,
-                      "Non renseigné"
-                    )
+                  {filteredRows.map(
+                    (row) => {
+                      const agent =
+                        row.agent
 
-                    const serviceName = getRelationName(
-                      agent.service_ref,
-                      agent.service || "Non renseigné"
-                    )
+                      return (
+                        <tr
+                          key={
+                            row.key
+                          }
+                          className="transition hover:bg-slate-50/80"
+                        >
+                          <td className="px-5 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-sm font-bold text-slate-600">
+                                {getInitials(
+                                  agent.nom
+                                )}
+                              </div>
 
-                    const positionName = getRelationName(
-                      agent.poste,
-                      "Non renseigné"
-                    )
+                              <div className="min-w-0">
+                                <Link
+                                  href={`/dashboard/agents/${agent.id}`}
+                                  className="font-semibold text-slate-900 transition hover:text-amber-600"
+                                >
+                                  {agent.nom ||
+                                    "Agent sans nom"}
+                                </Link>
 
-                    return (
-                      <tr
-                        key={agent.id}
-                        className="transition hover:bg-slate-50/80"
-                      >
-                        <td className="px-5 py-4">
-                          <div className="flex items-center gap-3">
-                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-sm font-bold text-slate-600">
-                              {getInitials(agent.nom)}
+                                <p className="mt-1 text-xs text-slate-500">
+                                  Agent #
+                                  {
+                                    agent.id
+                                  }
+                                  {" · "}
+                                  {row.principal
+                                    ? "Affectation principale"
+                                    : "Affectation complémentaire"}
+                                </p>
+                              </div>
                             </div>
+                          </td>
 
-                            <div className="min-w-0">
+                          <td className="px-5 py-4 text-slate-600">
+                            <div className="flex items-center gap-2">
+                              <MapPin className="h-4 w-4 shrink-0 text-slate-400" />
+                              {
+                                row.siteName
+                              }
+                            </div>
+                          </td>
+
+                          <td className="px-5 py-4 text-slate-600">
+                            <div className="flex items-center gap-2">
+                              <Building2 className="h-4 w-4 shrink-0 text-slate-400" />
+                              {
+                                row.serviceName
+                              }
+                            </div>
+                          </td>
+
+                          <td className="px-5 py-4 text-slate-600">
+                            <div className="flex items-center gap-2">
+                              <BriefcaseBusiness className="h-4 w-4 shrink-0 text-slate-400" />
+                              {
+                                row.posteName
+                              }
+                            </div>
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <StatusBadge
+                              status={
+                                agent.statut
+                              }
+                            />
+                          </td>
+
+                          <td className="px-5 py-4 font-medium text-slate-700">
+                            {agent.temps ||
+                              "—"}
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <div className="flex justify-end gap-2">
                               <Link
                                 href={`/dashboard/agents/${agent.id}`}
-                                className="font-semibold text-slate-900 transition hover:text-amber-600"
+                                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700"
                               >
-                                {agent.nom ||
-                                  "Agent sans nom"}
+                                Ouvrir
                               </Link>
 
-                              <p className="mt-1 text-xs text-slate-500">
-                                Agent #{agent.id}
-                              </p>
+                              {canDelete && (
+                                <DeleteAgentButton
+                                  id={
+                                    agent.id
+                                  }
+                                />
+                              )}
                             </div>
-                          </div>
-                        </td>
-
-                        <td className="px-5 py-4 text-slate-600">
-                          <div className="flex items-center gap-2">
-                            <MapPin className="h-4 w-4 shrink-0 text-slate-400" />
-                            {siteName}
-                          </div>
-                        </td>
-
-                        <td className="px-5 py-4 text-slate-600">
-                          <div className="flex items-center gap-2">
-                            <Building2 className="h-4 w-4 shrink-0 text-slate-400" />
-                            {serviceName}
-                          </div>
-                        </td>
-
-                        <td className="px-5 py-4 text-slate-600">
-                          <div className="flex items-center gap-2">
-                            <BriefcaseBusiness className="h-4 w-4 shrink-0 text-slate-400" />
-                            {positionName}
-                          </div>
-                        </td>
-
-                        <td className="px-5 py-4">
-                          <StatusBadge
-                            status={agent.statut}
-                          />
-                        </td>
-
-                        <td className="px-5 py-4 font-medium text-slate-700">
-                          {agent.temps || "—"}
-                        </td>
-
-                        <td className="px-5 py-4">
-                          <div className="flex justify-end gap-2">
-                            <Link
-                              href={`/dashboard/agents/${agent.id}`}
-                              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700"
-                            >
-                              Ouvrir
-                            </Link>
-
-                            {canDelete && (
-  <DeleteAgentButton
-    id={agent.id}
-  />
-)}
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
+                          </td>
+                        </tr>
+                      )
+                    }
+                  )}
                 </tbody>
               </table>
             </div>
@@ -603,7 +1149,9 @@ function StatCard({
             {label}
           </p>
 
-          <p className={`mt-3 text-3xl font-bold ${color}`}>
+          <p
+            className={`mt-3 text-3xl font-bold ${color}`}
+          >
             {value}
           </p>
         </div>
@@ -637,7 +1185,9 @@ function FilterSelect({
 
       <select
         name={name}
-        defaultValue={defaultValue}
+        defaultValue={
+          defaultValue
+        }
         className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-400/15"
       >
         {children}
@@ -651,13 +1201,18 @@ function StatusBadge({
 }: {
   status?: string | null
 }) {
-  const normalized = normalizeStatus(status)
+  const normalized =
+    normalizeStatus(
+      status
+    )
 
   const style =
     normalized === "actif"
       ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-      : normalized === "archivé" ||
-          normalized === "archive"
+      : normalized ===
+            "archivé" ||
+          normalized ===
+            "archive"
         ? "border-slate-200 bg-slate-100 text-slate-600"
         : "border-rose-200 bg-rose-50 text-rose-700"
 
@@ -665,40 +1220,18 @@ function StatusBadge({
     <span
       className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${style}`}
     >
-      {status || "Non renseigné"}
+      {status ||
+        "Non renseigné"}
     </span>
   )
-}
-
-function getRelation(
-  relation:
-    | NamedRelation
-    | NamedRelation[]
-    | null
-    | undefined
-) {
-  if (Array.isArray(relation)) {
-    return relation[0] || null
-  }
-
-  return relation || null
-}
-
-function getRelationName(
-  relation:
-    | NamedRelation
-    | NamedRelation[]
-    | null
-    | undefined,
-  fallback: string
-) {
-  return getRelation(relation)?.nom || fallback
 }
 
 function normalizeStatus(
   value?: string | null
 ) {
-  return String(value || "")
+  return String(
+    value || ""
+  )
     .trim()
     .toLowerCase()
 }
@@ -706,12 +1239,19 @@ function normalizeStatus(
 function getInitials(
   name?: string | null
 ) {
-  if (!name) return "?"
+  if (!name) {
+    return "?"
+  }
 
   return name
     .trim()
     .split(/\s+/)
     .slice(0, 2)
-    .map((part) => part.charAt(0).toUpperCase())
+    .map(
+      (part) =>
+        part
+          .charAt(0)
+          .toUpperCase()
+    )
     .join("")
 }

@@ -121,6 +121,9 @@ export default function UsersAdministrationPage() {
 const [successMessage, setSuccessMessage] =
   useState("")
 
+ const [currentUserRole, setCurrentUserRole] =
+  useState<ProfileRole | null>(null) 
+
   const loadProfiles = useCallback(async () => {
     try {
       setLoading(true)
@@ -132,6 +135,25 @@ const [successMessage, setSuccessMessage] =
 ])
 
 setProfiles(users)
+
+const {
+  data: { user: currentUser },
+  error: currentUserError,
+} = await supabase.auth.getUser()
+
+if (currentUserError) {
+  throw currentUserError
+}
+
+const connectedProfile =
+  users.find(
+    (profile) =>
+      profile.id === currentUser?.id
+  )
+
+setCurrentUserRole(
+  connectedProfile?.role ?? null
+)
 
 setCustomRoles(
   roles.filter(
@@ -167,6 +189,9 @@ setCustomRoles(
         profile.email
           .toLowerCase()
           .includes(normalizedSearch) ||
+        (profile.login_identifier || "")
+  .toLowerCase()
+  .includes(normalizedSearch) ||
         (profile.fonction || "")
           .toLowerCase()
           .includes(normalizedSearch)
@@ -550,18 +575,36 @@ async function resetPassword(
                     >
                       <td className="px-5 py-4">
                         <div className="font-bold text-slate-950">
-                          {getDisplayName(profile)}
-                        </div>
+  {getDisplayName(profile)}
+</div>
 
-                        <div className="mt-1 text-sm text-slate-500">
-                          {profile.email}
-                        </div>
+<div className="mt-1 text-sm text-slate-500">
+  <span className="font-semibold text-slate-600">
+    Connexion :
+  </span>{" "}
+  {profile.email}
+</div>
 
-                        {profile.fonction && (
-                          <div className="mt-1 text-xs text-slate-400">
-                            {profile.fonction}
-                          </div>
-                        )}
+{profile.contact_email && (
+  <div className="mt-1 text-sm text-slate-500">
+    <span className="font-semibold text-slate-600">
+      Contact :
+    </span>{" "}
+    {profile.contact_email}
+  </div>
+)}
+
+{profile.login_identifier && (
+  <div className="mt-1 text-xs text-slate-400">
+    Identifiant : {profile.login_identifier}
+  </div>
+)}
+
+{profile.fonction && (
+  <div className="mt-1 text-xs text-slate-400">
+    Fonction : {profile.fonction}
+  </div>
+)}
                       </td>
 
                       <td className="px-5 py-4">
@@ -668,20 +711,22 @@ async function resetPassword(
                                 : "Réactiver"}
                           </button>
 
-                          <button
-  type="button"
-  disabled={
-    updatingId === profile.id
-  }
-  onClick={() =>
-    void deleteProfile(profile)
-  }
-  className="inline-flex items-center gap-1.5 rounded-xl border border-red-300 bg-white px-3 py-2 text-xs font-semibold text-red-700 transition hover:border-red-500 hover:bg-red-50 disabled:cursor-wait disabled:opacity-50"
->
-  <Trash2 className="h-3.5 w-3.5" />
+                        {currentUserRole === "super_admin" && (
+  <button
+    type="button"
+    disabled={
+      updatingId === profile.id
+    }
+    onClick={() =>
+      void deleteProfile(profile)
+    }
+    className="inline-flex items-center gap-1.5 rounded-xl border border-red-300 bg-white px-3 py-2 text-xs font-semibold text-red-700 transition hover:border-red-500 hover:bg-red-50 disabled:cursor-wait disabled:opacity-50"
+  >
+    <Trash2 className="h-3.5 w-3.5" />
 
-  Supprimer
-</button>
+    Supprimer
+  </button>
+)}
                         </div>
                       </td>
                     </tr>

@@ -20,6 +20,7 @@ import {
 import { redirect } from "next/navigation"
 
 type KpiItem = {
+  key: string
   label: string
   value: string
   color: string
@@ -38,6 +39,16 @@ const {
 if (!user) {
   return null
 }
+
+const { data: dashboardPreferences } =
+  await supabase
+    .from("dashboard_preferences")
+    .select(`
+      widget_key,
+      visible,
+      position
+    `)
+    .eq("user_id", user.id)
 
 const { data: profile } = await supabase
   .from("profiles")
@@ -231,114 +242,156 @@ if (userRole === "agent") {
         )
       : 0
 
-  const kpis: KpiItem[] = [
-    {
-      label: "Agents actifs",
-      value: String(engineStats.activeAgents),
-      color: "text-emerald-600",
-      icon: UserCheck,
-      href: "/dashboard/agents",
-    },
-    {
-      label: "Conformité RH",
-      value: `${engineStats.complianceRate}%`,
-      color:
-        engineStats.complianceRate >= 80
-          ? "text-emerald-600"
-          : engineStats.complianceRate >= 50
-            ? "text-amber-600"
-            : "text-red-600",
-      icon: ShieldCheck,
-      href: "/dashboard/alertes",
-    },
-    {
-      label: "Alertes critiques",
-      value: String(engineStats.criticalAlerts),
-      color:
-        engineStats.criticalAlerts > 0
-          ? "text-red-600"
-          : "text-emerald-600",
-      icon: AlertTriangle,
-      href: "/dashboard/alertes",
-    },
-    {
-      label: "Dossiers incomplets",
-      value: String(engineStats.incompleteAgents),
-      color:
-        engineStats.incompleteAgents > 0
+ const kpis: KpiItem[] = [
+  {
+    key: "agents_actifs",
+    label: "Agents actifs",
+    value: String(engineStats.activeAgents),
+    color: "text-emerald-600",
+    icon: UserCheck,
+    href: "/dashboard/agents",
+  },
+  {
+    key: "conformite_rh",
+    label: "Conformité RH",
+    value: `${engineStats.complianceRate}%`,
+    color:
+      engineStats.complianceRate >= 80
+        ? "text-emerald-600"
+        : engineStats.complianceRate >= 50
           ? "text-amber-600"
-          : "text-emerald-600",
-      icon: FileCheck2,
-      href: "/dashboard/alertes",
-    },
-    {
-      label: "Effectif du jour",
-      value: String(totalAgentsJour),
-      color: "text-cyan-600",
-      icon: Users,
-    },
-    {
-      label: "Agents présents",
-      value: String(presents),
-      color: "text-emerald-600",
-      icon: Users,
-    },
-    {
-      label: "Absences du jour",
-      value: String(absents),
-      color: "text-amber-600",
-      icon: CalendarOff,
-    },
-    {
-      label: "Remplacements",
-      value: String(remplaces),
-      color: "text-red-500",
-      icon: ClockAlert,
-    },
-    {
-      label: "Couverture opérationnelle",
-      value: `${couvertureOperationnelle}%`,
-      color: "text-emerald-600",
-      icon: ShieldCheck,
-    },
-    {
-      label: "Taux de présence",
-      value: `${tauxPresence}%`,
-      color: "text-emerald-600",
-      icon: Users,
-    },
-    {
-      label: "Congés à venir",
-      value: String(
-        congesAVenirCount || 0
-      ),
-      color: "text-violet-600",
-      icon: CalendarDays,
-    },
-    {
-      label: "Demandes en attente",
-      value: String(
-        demandesEnAttenteCount || 0
-      ),
-      color: "text-blue-600",
-      icon: FileCheck2,
-    },
-    {
-      label: "Congés validés",
-      value: String(
-        congesValidesCount || 0
-      ),
-      color: "text-cyan-600",
-      icon: CalendarDays,
-    },
-    {
-      label: "Structures",
-      value: String(structuresCount || 0),
-      color: "text-amber-600",
-      icon: Building2,
-      href: "/dashboard/structures",
-    },
-  ]
+          : "text-red-600",
+    icon: ShieldCheck,
+    href: "/dashboard/alertes",
+  },
+  {
+    key: "alertes_critiques",
+    label: "Alertes critiques",
+    value: String(engineStats.criticalAlerts),
+    color:
+      engineStats.criticalAlerts > 0
+        ? "text-red-600"
+        : "text-emerald-600",
+    icon: AlertTriangle,
+    href: "/dashboard/alertes",
+  },
+  {
+    key: "dossiers_incomplets",
+    label: "Dossiers incomplets",
+    value: String(engineStats.incompleteAgents),
+    color:
+      engineStats.incompleteAgents > 0
+        ? "text-amber-600"
+        : "text-emerald-600",
+    icon: FileCheck2,
+    href: "/dashboard/alertes",
+  },
+  {
+    key: "effectif_jour",
+    label: "Effectif du jour",
+    value: String(totalAgentsJour),
+    color: "text-cyan-600",
+    icon: Users,
+  },
+  {
+    key: "agents_presents",
+    label: "Agents présents",
+    value: String(presents),
+    color: "text-emerald-600",
+    icon: Users,
+  },
+  {
+    key: "absences_jour",
+    label: "Absences du jour",
+    value: String(absents),
+    color: "text-amber-600",
+    icon: CalendarOff,
+  },
+  {
+    key: "remplacements",
+    label: "Remplacements",
+    value: String(remplaces),
+    color: "text-red-500",
+    icon: ClockAlert,
+  },
+  {
+    key: "couverture_operationnelle",
+    label: "Couverture opérationnelle",
+    value: `${couvertureOperationnelle}%`,
+    color: "text-emerald-600",
+    icon: ShieldCheck,
+  },
+  {
+    key: "taux_presence",
+    label: "Taux de présence",
+    value: `${tauxPresence}%`,
+    color: "text-emerald-600",
+    icon: Users,
+  },
+  {
+    key: "conges_a_venir",
+    label: "Congés à venir",
+    value: String(congesAVenirCount || 0),
+    color: "text-violet-600",
+    icon: CalendarDays,
+  },
+  {
+    key: "demandes_attente",
+    label: "Demandes en attente",
+    value: String(demandesEnAttenteCount || 0),
+    color: "text-blue-600",
+    icon: FileCheck2,
+  },
+  {
+    key: "conges_valides",
+    label: "Congés validés",
+    value: String(congesValidesCount || 0),
+    color: "text-cyan-600",
+    icon: CalendarDays,
+  },
+  {
+    key: "structures",
+    label: "Structures",
+    value: String(structuresCount || 0),
+    color: "text-amber-600",
+    icon: Building2,
+    href: "/dashboard/structures",
+  },
+]
+
+const preferenceMap =
+  new Map(
+    (dashboardPreferences || []).map(
+      (preference) => [
+        preference.widget_key,
+        preference,
+      ]
+    )
+  )
+
+const visibleKpis =
+  kpis
+    .filter((item) => {
+      const preference =
+        preferenceMap.get(item.key)
+
+      /*
+       * Aucune préférence enregistrée
+       * = visible par défaut.
+       */
+      return preference?.visible !== false
+    })
+    .sort((a, b) => {
+      const aPosition =
+        preferenceMap.get(a.key)?.position ??
+        kpis.indexOf(a)
+
+      const bPosition =
+        preferenceMap.get(b.key)?.position ??
+        kpis.indexOf(b)
+
+      return aPosition - bPosition
+    })
 
   const hasOperationalAlerts =
     absents > 0 ||
@@ -402,12 +455,12 @@ if (userRole === "agent") {
 
         {/* KPI */}
         <section className="mt-7 grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-          {kpis.map((item) => (
-            <KpiCard
-              key={item.label}
-              item={item}
-            />
-          ))}
+         {visibleKpis.map((item) => (
+  <KpiCard
+    key={item.key}
+    item={item}
+  />
+))}
         </section>
 
         {/* Situation opérationnelle */}

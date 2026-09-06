@@ -11,6 +11,8 @@ export type ProfileRole =
 export type ProfileRecord = {
   id: string
   email: string
+  contact_email: string | null
+  login_identifier?: string | null
   nom: string | null
   prenom: string | null
   telephone: string | null
@@ -59,11 +61,21 @@ export type ProfileRecord = {
         nom: string | null
       }[]
     | null
+
+    responsable_site_affectations?:
+    | {
+        site_id: string | number
+        principal: boolean
+        actif: boolean
+      }[]
+    | null  
 }
 
 export type ProfileCreatePayload = {
   id: string
   email: string
+  contact_email: string | null
+  login_identifier?: string | null
   nom?: string | null
   prenom?: string | null
   telephone?: string | null
@@ -127,6 +139,17 @@ function normalizeProfilePayload(
             .toLowerCase(),
         }
       : {}),
+
+    ...(payload.contact_email !== undefined
+  ? {
+      contact_email:
+        payload.contact_email
+          ? payload.contact_email
+              .trim()
+              .toLowerCase()
+          : null,
+    }
+  : {}),
 
     ...(payload.nom !== undefined
       ? {

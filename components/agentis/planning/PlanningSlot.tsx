@@ -16,13 +16,22 @@ import PlanningAgentBadge from "./PlanningAgentBadge"
 import ReplacementEngine, {
   type ReplacementCandidate,
 } from "@/lib/services/ReplacementEngine"
-import PlanningRequirementsService from "@/lib/services/PlanningRequirementsService"
+import type {
+  PlanningRequirementRoleKey,
+} from "@/lib/services/PlanningRequirementsService"
+import {
+  mapPosteToRequirementRole,
+} from "@/lib/planning/roleMapping"
+import { planningSlots } from "@/lib/planning/slots"
 
 export type PlanningSlotItem = {
   id: string | number
   name: string
   isVacancy: boolean
   status: "present" | "absence" | "replacement"
+
+  posteId?: string | number | null
+  posteName?: string | null
 }
 
 type Props = {
@@ -31,7 +40,9 @@ type Props = {
   slotKey: string
   label: string
   time: string
+  configuredSlots?: typeof planningSlots
   items: PlanningSlotItem[]
+  requirementsByRole: Record<string, number>
   selectedDate: string
 
   onMoveAssignment: (
@@ -68,7 +79,9 @@ export default function PlanningSlot({
   slotKey,
   label,
   time,
+  configuredSlots,
   items,
+  requirementsByRole,
   selectedDate,
   onAssignmentCreated,
   onEditAssignment,
@@ -117,6 +130,118 @@ export default function PlanningSlot({
 
   const [start = "", end = ""] =
     time.split(" - ")
+
+  const visibleRequirements =
+  Object.entries(
+    requirementsByRole
+  ).filter(
+    ([, quantity]) =>
+      Number(quantity) > 0
+  )
+
+const totalRequired =
+  visibleRequirements.reduce(
+    (total, [, quantity]) =>
+      total +
+      (Number(quantity) || 0),
+    0
+  )
+
+const assignedCount =
+  items.filter(
+    (item) => !item.isVacancy
+  ).length
+
+const assignedByRole =
+  items.reduce<
+    Record<string, number>
+  >(
+    (result, item) => {
+      if (item.isVacancy) {
+        return result
+      }
+
+      const roleKey =
+        mapPosteToRequirementRole(
+          item.posteName
+        )
+
+      if (!roleKey) {
+        return result
+      }
+
+      result[roleKey] =
+        (result[roleKey] || 0) + 1
+
+      return result
+    },
+    {}
+  )
+
+const coveredByRole =
+  visibleRequirements.reduce(
+    (total, [roleKey, quantity]) => {
+      const required =
+        Number(quantity) || 0
+
+      /*
+       * Non précisé :
+       * n'importe quel agent peut couvrir ce besoin.
+       */
+      if (roleKey === "non_precise") {
+        return (
+          total +
+          Math.min(
+            required,
+            assignedCount
+          )
+        )
+      }
+
+      const assigned =
+        assignedByRole[roleKey] || 0
+
+      return (
+        total +
+        Math.min(
+          required,
+          assigned
+        )
+      )
+    },
+    0
+  )
+
+ const missingByRole = Object.entries(
+  requirementsByRole || {}
+).reduce<Record<string, number>>(
+  (result, [roleKey, requiredValue]) => {
+    const required =
+      Number(requiredValue) || 0
+
+    const assigned =
+      assignedByRole[roleKey] || 0
+
+    const missing = Math.max(
+      0,
+      required - assigned
+    )
+
+    if (missing > 0) {
+      result[roleKey] = missing
+    }
+
+    return result
+  },
+  {}
+)
+
+const totalMissingByRole =
+  Object.values(missingByRole).reduce(
+    (total, missing) =>
+      total + missing,
+    0
+  ) 
 
   function handleDragStart(
     event: React.DragEvent<HTMLDivElement>,
@@ -188,56 +313,81 @@ export default function PlanningSlot({
   }
 
   async function openReplacementSuggestions(
-    vacancyId: string | number
-  ) {
-    setSuggestionsVacancyId(vacancyId)
-    setCandidates([])
-    setReplacementError("")
-    setLoadingCandidates(true)
+  vacancyId: string | number
+) {
+  setSuggestionsVacancyId(vacancyId)
+  setCandidates([])
+  setReplacementError("")
+  setLoadingCandidates(true)
 
-    try {
-      const [results, requirements] =
-        await Promise.all([
-          ReplacementEngine.getBestCandidates(
-            vacancyId,
-            8
-          ),
-          PlanningRequirementsService.getBySite(
-            siteId
-          ),
-        ])
-
-      const requirement = requirements.find(
-        (row) => row.slot_key === slotKey
+  try {
+    /*
+     * Premier rôle réellement manquant
+     * sur ce créneau.
+     *
+     * Exemple :
+     * {
+     *   surveillant: 1
+     * }
+     *
+     * => requiredRole = "surveillant"
+     */
+    const missingRoleEntry =
+      Object.entries(
+        missingByRole
+      ).find(
+        ([, missing]) =>
+          Number(missing) > 0
       )
 
-      const required =
-        requirement?.required_agents ?? 0
+    const requiredRole =
+      missingRoleEntry?.[0] ?? null
 
-      const assigned = items.filter(
-        (item) => !item.isVacancy
-      ).length
-
-      setReplacementContext({
-        required,
-        assigned,
-        missing: Math.max(
-          0,
-          required - assigned
-        ),
-      })
-
-      setCandidates(results)
-    } catch (error: unknown) {
-      setReplacementError(
-        error instanceof Error
-          ? error.message
-          : "Impossible de rechercher des remplaçants."
+    /*
+     * Le moteur reçoit maintenant
+     * le rôle à privilégier.
+     */
+    const results =
+      await ReplacementEngine.getBestCandidates(
+        vacancyId,
+        8,
+        requiredRole as
+  | PlanningRequirementRoleKey
+  | null
       )
-    } finally {
-      setLoadingCandidates(false)
-    }
+
+    /*
+     * Contexte global du créneau.
+     *
+     * On utilise directement les calculs
+     * déjà réalisés dans PlanningSlot :
+     *
+     * totalRequired
+     * assignedCount
+     * totalMissingByRole
+     */
+    setReplacementContext({
+      required:
+        totalRequired,
+
+      assigned:
+        assignedCount,
+
+      missing:
+        totalMissingByRole,
+    })
+
+    setCandidates(results)
+  } catch (error: unknown) {
+    setReplacementError(
+      error instanceof Error
+        ? error.message
+        : "Impossible de rechercher des remplaçants."
+    )
+  } finally {
+    setLoadingCandidates(false)
   }
+}
 
   function openManualReplacement() {
     if (suggestionsVacancyId === null) {
@@ -350,6 +500,71 @@ export default function PlanningSlot({
             : "hover:bg-slate-50/70"
         }`}
       >
+
+        {totalRequired > 0 && (
+  <div className="mb-2 rounded-xl border border-slate-200 bg-slate-50/80 p-2.5">
+    <div className="flex items-center justify-between gap-2">
+      <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">
+        Besoin
+      </span>
+
+      <span
+        className={`rounded-md px-2 py-0.5 text-[11px] font-bold ${
+          coveredByRole >= totalRequired
+            ? "bg-emerald-100 text-emerald-700"
+            : "bg-red-100 text-red-700"
+        }`}
+      >
+        {coveredByRole}/{totalRequired}
+      </span>
+    </div>
+
+    <div className="mt-2 space-y-1">
+      {visibleRequirements.map(
+  ([roleKey, quantity]) => {
+    const assignedForRole =
+      assignedByRole[
+        roleKey
+      ] || 0
+
+    const requiredForRole =
+      Number(
+        quantity
+      ) || 0
+
+    const covered =
+      assignedForRole >=
+      requiredForRole
+
+    return (
+      <div
+        key={roleKey}
+        className="flex items-center justify-between gap-2 text-[11px]"
+      >
+        <span className="min-w-0 truncate font-medium text-slate-600">
+          {getRoleLabel(
+            roleKey
+          )}
+        </span>
+
+        <span
+          className={`shrink-0 rounded-md px-2 py-0.5 font-bold ${
+            covered
+              ? "bg-emerald-100 text-emerald-700"
+              : "bg-amber-100 text-amber-700"
+          }`}
+        >
+          {assignedForRole}/
+          {requiredForRole}
+        </span>
+      </div>
+    )
+  }
+)}
+    </div>
+  </div>
+)}
+
         <div className="flex flex-col gap-2">
           {items.length === 0 ? (
             <button
@@ -430,6 +645,7 @@ export default function PlanningSlot({
         open={openDialog}
         onClose={closeDialog}
         selectedDate={selectedDate}
+        configuredSlots={configuredSlots}
         initialSiteId={siteId}
         initialSlot={slotKey}
         vacancyId={replacementVacancyId}
@@ -669,6 +885,32 @@ export default function PlanningSlot({
         </div>
       )}
     </>
+  )
+}
+
+function getRoleLabel(
+  roleKey: string
+) {
+  const labels: Record<
+    string,
+    string
+  > = {
+    non_precise: "Non précisé",
+    surveillant: "Surveillant",
+    enseignant:
+      "Enseignant / Instituteur",
+    atsem: "ATSEM",
+    cuisinier: "Cuisinier",
+    agent_restauration:
+      "Agent de restauration",
+    animateur: "Animateur",
+    agent_technique:
+      "Agent technique",
+  }
+
+  return (
+    labels[roleKey] ||
+    roleKey
   )
 }
 

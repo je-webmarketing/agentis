@@ -3,8 +3,9 @@ import type { ProfileRole } from "@/lib/services/ProfileService"
 export type UserCreatePayload = {
   nom: string
   prenom: string
-  email: string
-
+  email?: string | null
+contact_email?: string | null
+login_identifier?: string | null
   telephone: string
   fonction: string
 

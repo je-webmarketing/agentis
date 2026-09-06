@@ -34,6 +34,7 @@ type PlanningRow = {
   id: string | number
   site_id: string | number
   service: string | null
+  service_id?: string | number | null
   agent_id: string | number | null
   statut: string | null
   est_poste_vacant?: boolean | null
@@ -73,6 +74,7 @@ type SlotSummary = {
   missing: number
   status: "ok" | "warning" | "danger"
   agents: CompactAgent[]
+  allowReplacement?: boolean
 }
 
 type StructureSummary = {
@@ -456,8 +458,24 @@ export default function PlanningSupervisionPage() {
             }
           })
 
-          const expected =
-            requirementsForSite[slot.key] ?? 0
+          
+
+          const requirementByRole =
+  requirementsBySite[
+    String(site.id)
+  ]?.[slot.key] || {}
+
+
+
+const expected =
+  Object.values(
+    requirementByRole
+  ).reduce(
+    (total, value) =>
+      total +
+      (Number(value) || 0),
+    0
+  )
 
           const assigned = rowsForSlot.filter(
             (row) => !isVacancy(row)
@@ -479,6 +497,59 @@ export default function PlanningSupervisionPage() {
             agents,
           }
         })
+
+          const periscolaireRows = rowsForSite.filter(
+  (row) =>
+    String(row.service_id) === "5" &&
+    !isVacancy(row)
+)
+
+const periscolaireRequirement =
+  requirementsForSite.periscolaire || {}
+
+const periscolaireExpected =
+  Object.values(periscolaireRequirement).reduce(
+    (total, value) =>
+      total + (Number(value) || 0),
+    0
+  )
+
+const periscolaireAgents: CompactAgent[] =
+  periscolaireRows.map((row) => {
+    const agentName = Array.isArray(row.agent)
+      ? row.agent[0]?.nom
+      : row.agent?.nom
+
+    return {
+      id: row.id,
+      agentId: row.agent_id,
+      name:
+        agentName?.trim() ||
+        `Agent ${row.agent_id ?? row.id}`,
+      status: "present",
+    }
+  })
+
+const periscolaireAssigned =
+  periscolaireAgents.length
+
+const periscolaireMissing = Math.max(
+  0,
+  periscolaireExpected -
+    periscolaireAssigned
+)
+
+slotSummaries.push({
+  key: "periscolaire",
+  label: "Périscolaire",
+  time: "Service",
+  expected: periscolaireExpected,
+  assigned: periscolaireAssigned,
+  missing: periscolaireMissing,
+  status: getStatus(periscolaireMissing),
+  agents: periscolaireAgents,
+  allowReplacement: false,
+})
 
         const expected = slotSummaries.reduce(
           (total, slot) => total + slot.expected,
@@ -775,6 +846,8 @@ export default function PlanningSupervisionPage() {
       })
     }
   }
+
+  
 
   async function loadReplacementRecommendations(
     context: VacancyContext
@@ -1656,7 +1729,8 @@ function StructureCard({
               ))}
 
               {slot.missing > 0 &&
-                !slot.agents.some(
+  slot.allowReplacement !== false &&
+  !slot.agents.some(
                   (agent) =>
                     agent.status === "absence"
                 ) && (

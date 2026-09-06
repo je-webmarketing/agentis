@@ -1,3 +1,7 @@
+import AgentWeeklyCycleEditor, {
+  type WeeklyCycleDay,
+} from "@/components/agentis/forms/AgentWeeklyCycleEditor"
+
 type RefItem = {
   id: number
   nom: string
@@ -7,9 +11,11 @@ type Props = {
   nom: string
   statut: string
   temps: string
+  weeklyCycle: WeeklyCycleDay[]
   siteId: string
   serviceId: string
   posteId: string
+  estPolyvalent: boolean
 
   matricule?: string
   dateNaissance?: string
@@ -36,9 +42,15 @@ type Props = {
   onNomChange: (value: string) => void
   onStatutChange: (value: string) => void
   onTempsChange: (value: string) => void
+  onWeeklyCycleChange: (
+  value: WeeklyCycleDay[]
+) => void
   onSiteChange: (value: string) => void
   onServiceChange: (value: string) => void
   onPosteChange: (value: string) => void
+  onEstPolyvalentChange: (
+  value: boolean
+) => void
 
   onMatriculeChange?: (value: string) => void
   onDateNaissanceChange?: (value: string) => void
@@ -61,11 +73,13 @@ type Props = {
 
 export default function AgentForm({
   nom,
-  statut,
-  temps,
-  siteId,
-  serviceId,
-  posteId,
+statut,
+temps,
+weeklyCycle,
+siteId,
+serviceId,
+posteId,
+estPolyvalent,
 
   matricule = "",
   dateNaissance = "",
@@ -89,12 +103,14 @@ export default function AgentForm({
 
   saving = false,
 
-  onNomChange,
-  onStatutChange,
-  onTempsChange,
-  onSiteChange,
-  onServiceChange,
-  onPosteChange,
+ onNomChange,
+onStatutChange,
+onTempsChange,
+onWeeklyCycleChange,
+onSiteChange,
+onServiceChange,
+onPosteChange,
+onEstPolyvalentChange,
 
   onMatriculeChange,
   onDateNaissanceChange,
@@ -155,6 +171,29 @@ export default function AgentForm({
             ))}
           </SelectField>
 
+          <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+  <input
+    type="checkbox"
+    checked={estPolyvalent}
+    onChange={(event) =>
+      onEstPolyvalentChange(
+        event.target.checked
+      )
+    }
+    className="h-4 w-4 rounded border-slate-300 accent-amber-500"
+  />
+
+  <span>
+    <span className="block text-sm font-semibold text-slate-800">
+      Agent polyvalent / mobile
+    </span>
+
+    <span className="mt-0.5 block text-xs text-slate-500">
+      Peut intervenir sur plusieurs sites
+    </span>
+  </span>
+</label>
+
           <SelectField
             label="Service"
             value={serviceId}
@@ -209,6 +248,11 @@ export default function AgentForm({
           </SelectField>
         </div>
       </section>
+
+      <AgentWeeklyCycleEditor
+  value={weeklyCycle}
+  onChange={onWeeklyCycleChange}
+/>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="border-b border-slate-200 pb-4">

@@ -28,53 +28,110 @@ export async function POST(request: Request) {
       continue
     }
 
-    let { data: agent } = await supabase
-      .from("agents")
-      .select("id")
-      .ilike("nom", nom)
-      .maybeSingle()
+   let siteId: number | null = null
 
-    if (!agent) {
-      const { data: newAgent } = await supabase
-        .from("agents")
+if (centre) {
+  let { data: site } = await supabase
+    .from("sites")
+    .select("id")
+    .ilike("nom", centre)
+    .maybeSingle()
+
+  if (!site) {
+    const { data: newSite, error: siteCreateError } =
+      await supabase
+        .from("sites")
         .insert({
-          nom,
-          statut: "Actif",
-          temps: "35h",
-          service: "",
+          nom: centre,
+          actif: true,
         })
         .select("id")
         .single()
 
-      agent = newAgent
-      agentsCrees++
+    if (siteCreateError) {
+      console.error(
+        "Erreur création site :",
+        siteCreateError
+      )
     }
 
-    let siteId = null
+    site = newSite
+    sitesCrees++
+  }
 
-    if (centre) {
-      let { data: site } = await supabase
-        .from("sites")
-        .select("id")
-        .ilike("nom", centre)
-        .maybeSingle()
+  siteId = site?.id ?? null
+}
 
-      if (!site) {
-        const { data: newSite } = await supabase
-          .from("sites")
-          .insert({
-            nom: centre,
-            actif: true,
-          })
-          .select("id")
-          .single()
+/*
+ * Recherche de l'agent.
+ * On récupère également son site actuel.
+ */
+let { data: agent } = await supabase
+  .from("agents")
+  .select("id, site_id")
+  .ilike("nom", nom)
+  .maybeSingle()
 
-        site = newSite
-        sitesCrees++
-      }
+if (!agent) {
+  /*
+   * Nouvel agent :
+   * on mémorise immédiatement son site.
+   */
+  const {
+    data: newAgent,
+    error: agentCreateError,
+  } = await supabase
+    .from("agents")
+    .insert({
+      nom,
+      statut: "Actif",
+      temps: "35h",
+      service: "",
+      site_id: siteId,
+    })
+    .select("id, site_id")
+    .single()
 
-      siteId = site?.id || null
-    }
+  if (agentCreateError) {
+    console.error(
+      "Erreur création agent :",
+      agentCreateError
+    )
+  }
+
+  agent = newAgent
+  agentsCrees++
+} else if (
+  siteId !== null &&
+  agent.site_id === null
+) {
+  /*
+   * Ancien agent sans site :
+   * on complète son rattachement.
+   *
+   * On n'écrase jamais un site déjà renseigné.
+   */
+  const {
+    data: updatedAgent,
+    error: agentUpdateError,
+  } = await supabase
+    .from("agents")
+    .update({
+      site_id: siteId,
+    })
+    .eq("id", agent.id)
+    .select("id, site_id")
+    .single()
+
+  if (agentUpdateError) {
+    console.error(
+      "Erreur rattachement agent/site :",
+      agentUpdateError
+    )
+  } else {
+    agent = updatedAgent
+  }
+}
 
     if (!agent?.id) {
       lignesIgnorees++

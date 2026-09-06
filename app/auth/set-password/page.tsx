@@ -245,16 +245,9 @@ console.log(
         throw updateError
       }
 
-      /*
-       * On termine la session d'invitation.
-       * L'utilisateur se reconnectera ensuite
-       * normalement avec son nouveau mot de passe.
-       */
-      await supabase.auth.signOut()
-
-      window.location.replace(
-        "/login?password-created=1"
-      )
+    window.location.replace(
+  "/login?password-created=1"
+)
     } catch (error: unknown) {
       setErrorMessage(
         getErrorMessage(error)

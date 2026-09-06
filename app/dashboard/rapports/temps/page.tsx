@@ -33,6 +33,14 @@ type PlanningRow = {
   statut: string | null
 }
 
+type WeeklyCycleRow = {
+  agent_id: string | number
+  jour_semaine: number
+  actif: boolean
+  heure_debut: string | null
+  heure_fin: string | null
+}
+
 type TimeReportRow = {
   id: string | number
   nom: string
@@ -144,6 +152,68 @@ function isWorkedStatus(
   )
 }
 
+function getIsoWeekday(
+  dateValue: string | null
+): number | null {
+  if (!dateValue) return null
+
+  const date = new Date(
+    `${dateValue}T12:00:00`
+  )
+
+  if (Number.isNaN(date.getTime())) {
+    return null
+  }
+
+  const jsDay = date.getDay()
+
+  // JS : dimanche = 0
+  // Notre cycle : lundi = 1 ... dimanche = 7
+  return jsDay === 0 ? 7 : jsDay
+}
+
+function getCycleRowsForDay(
+  weeklyCycles: WeeklyCycleRow[],
+  agentId: string | number,
+  date: string | null
+): WeeklyCycleRow[] {
+  const weekday = getIsoWeekday(date)
+
+  if (weekday === null) {
+    return []
+  }
+
+  return weeklyCycles
+    .filter(
+      (cycle) =>
+        String(cycle.agent_id) ===
+          String(agentId) &&
+        Number(cycle.jour_semaine) ===
+          weekday &&
+        cycle.actif === true
+    )
+    .sort((a, b) =>
+      String(a.heure_debut || "")
+        .localeCompare(
+          String(b.heure_debut || "")
+        )
+    )
+}
+
+function getCycleDurationHours(
+  cycles: WeeklyCycleRow[]
+): number {
+  return cycles.reduce(
+    (total, cycle) =>
+      total +
+      getDurationHours(
+        cycle.heure_debut,
+        cycle.heure_fin
+      ),
+    0
+  )
+}
+
 function roundHours(value: number): number {
   return Math.round(value * 100) / 100
 }
@@ -204,39 +274,51 @@ export default async function TempsReportPage({
   const startDate = `${selectedYear}-01-01`
   const endDate = `${selectedYear}-12-31`
 
-  const [
-    agentsResult,
-    planningResult,
-  ] = await Promise.all([
-    supabase
-      .from("agents")
-      .select(`
-        id,
-        nom,
-        statut,
-        temps
-      `)
-      .order("nom", {
-        ascending: true,
-      }),
+ const [
+  agentsResult,
+  planningResult,
+  weeklyCycleResult,
+] = await Promise.all([
+  supabase
+    .from("agents")
+    .select(`
+      id,
+      nom,
+      statut,
+      temps
+    `)
+    .order("nom", {
+      ascending: true,
+    }),
 
-    supabase
-      .from("planning_journalier")
-      .select(`
-        agent_id,
-        date,
-        heure_debut,
-        heure_fin,
-        statut
-      `)
-      .gte("date", startDate)
-      .lte("date", endDate)
-      .not("agent_id", "is", null),
-  ])
+  supabase
+    .from("planning_journalier")
+    .select(`
+      agent_id,
+      date,
+      heure_debut,
+      heure_fin,
+      statut
+    `)
+    .gte("date", startDate)
+    .lte("date", endDate)
+    .not("agent_id", "is", null),
 
+  supabase
+    .from("agent_cycle_hebdomadaire")
+    .select(`
+      agent_id,
+      jour_semaine,
+      actif,
+      heure_debut,
+      heure_fin
+    `)
+    .eq("actif", true),
+])
   const firstError =
-    agentsResult.error ||
-    planningResult.error
+  agentsResult.error ||
+  planningResult.error ||
+  weeklyCycleResult.error
 
   if (firstError) {
     return (
@@ -264,31 +346,121 @@ export default async function TempsReportPage({
   const planning =
     (planningResult.data || []) as PlanningRow[]
 
-  const hoursByAgent =
-    new Map<string, number>()
+  const weeklyCycles =
+  (weeklyCycleResult.data || []) as WeeklyCycleRow[]
 
-  for (const assignment of planning) {
-    if (
-      assignment.agent_id === null ||
-      !isWorkedStatus(assignment.statut)
-    ) {
-      continue
-    }
+ const hoursByAgent =
+  new Map<string, number>()
 
-    const agentId =
-      String(assignment.agent_id)
+const planningByAgentAndDate =
+  new Map<string, PlanningRow[]>()
 
-    const duration = getDurationHours(
-      assignment.heure_debut,
-      assignment.heure_fin
-    )
-
-    hoursByAgent.set(
-      agentId,
-      (hoursByAgent.get(agentId) || 0) +
-        duration
-    )
+/*
+ * Regroupement par agent + journée.
+ */
+for (const assignment of planning) {
+  if (
+    assignment.agent_id === null ||
+    !isWorkedStatus(assignment.statut) ||
+    !assignment.date
+  ) {
+    continue
   }
+
+  const key =
+    `${assignment.agent_id}-${assignment.date}`
+
+  const existing =
+    planningByAgentAndDate.get(key) || []
+
+  existing.push(assignment)
+
+  planningByAgentAndDate.set(
+    key,
+    existing
+  )
+}
+
+/*
+ * Calcul d'une seule durée par journée.
+ */
+for (const assignments of
+  planningByAgentAndDate.values()) {
+
+  const firstAssignment =
+    assignments[0]
+
+  if (
+    !firstAssignment ||
+    firstAssignment.agent_id === null
+  ) {
+    continue
+  }
+
+  const agentId =
+    String(firstAssignment.agent_id)
+
+  const cycleRows =
+    getCycleRowsForDay(
+      weeklyCycles,
+      firstAssignment.agent_id,
+      firstAssignment.date
+    )
+
+  /*
+   * On additionne d'abord uniquement
+   * les créneaux Excel complets.
+   */
+  const completeDurations =
+    assignments.reduce(
+      (total, assignment) => {
+        if (
+          !assignment.heure_debut ||
+          !assignment.heure_fin
+        ) {
+          return total
+        }
+
+        return (
+          total +
+          getDurationHours(
+            assignment.heure_debut,
+            assignment.heure_fin
+          )
+        )
+      },
+      0
+    )
+
+  let dayDuration = 0
+
+  /*
+   * Priorité aux horaires complets
+   * réellement présents dans le planning.
+   */
+  if (completeDurations > 0) {
+    dayDuration = completeDurations
+  }
+
+  /*
+   * Sinon on utilise UNE SEULE FOIS
+   * le cycle hebdomadaire de la journée.
+   */
+  else if (cycleRows.length > 0) {
+    dayDuration =
+      getCycleDurationHours(cycleRows)
+  }
+
+  if (dayDuration <= 0) {
+    continue
+  }
+
+  hoursByAgent.set(
+    agentId,
+    (hoursByAgent.get(agentId) || 0) +
+      dayDuration
+  )
+} 
 
   const yearProgress =
     getYearProgress(selectedYear)

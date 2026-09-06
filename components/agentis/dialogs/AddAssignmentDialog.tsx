@@ -38,6 +38,7 @@ export type AssignmentInitialValues = {
 type AgentRecord = {
   id: string | number
   nom: string | null
+  service_id?: string | number | null
 }
 
 type SiteRecord = {
@@ -50,6 +51,7 @@ type AddAssignmentDialogProps = {
   onClose: () => void
   selectedDate: string
   onAssignmentCreated?: () => void | Promise<void>
+  configuredSlots?: typeof planningSlots
 
   /*
    * Compatibilité avec les appels existants.
@@ -128,12 +130,14 @@ export default function AddAssignmentDialog({
   onClose,
   selectedDate,
   onAssignmentCreated,
+  configuredSlots = planningSlots,
   initialSiteId = null,
   initialSlot = null,
   vacancyId = null,
   mode,
   initialValues = null,
 }: AddAssignmentDialogProps) {
+
   const effectiveMode: AssignmentDialogMode =
     mode ||
     (vacancyId !== null && vacancyId !== undefined
@@ -158,9 +162,13 @@ export default function AddAssignmentDialog({
   const [commentaire, setCommentaire] = useState("")
 
   const selectedSlot = useMemo(
-    () => getSlotConfiguration(slot),
-    [slot]
-  )
+  () =>
+    configuredSlots.find(
+      (planningSlot) =>
+        planningSlot.key === slot
+    ),
+  [slot, configuredSlots]
+)
 
   const assignmentId =
     initialValues?.assignmentId ?? null
@@ -196,9 +204,11 @@ export default function AddAssignmentDialog({
         setErrorMessage("")
 
         const [agentsData, sitesData] = await Promise.all([
-          AgentService.list(),
+          AgentService.listPlanningCandidates(),
           SiteService.list(),
         ])
+
+
 
         if (!active) return
 
@@ -256,7 +266,10 @@ export default function AddAssignmentDialog({
   getDefaultSlotKey()
 
     const slotConfiguration =
-      getSlotConfiguration(effectiveSlot)
+  configuredSlots.find(
+    (planningSlot) =>
+      planningSlot.key === effectiveSlot
+  )
 
     setDate(effectiveDate)
     setAgentId(
@@ -291,30 +304,34 @@ export default function AddAssignmentDialog({
     )
     setErrorMessage("")
     setSubmitting(false)
-  }, [
-    open,
-    selectedDate,
-    initialSiteId,
-    initialSlot,
-    initialValues,
-    isReplacement,
-  ])
+ }, [
+  open,
+  selectedDate,
+  initialSiteId,
+  initialSlot,
+  initialValues,
+  isReplacement,
+  configuredSlots,
+])
 
   if (!open) return null
 
   function handleSlotChange(
   nextSlot: PlanningSlotKey
 ) {
-    const slotConfiguration =
-      getSlotConfiguration(nextSlot)
+  const slotConfiguration =
+    configuredSlots.find(
+      (planningSlot) =>
+        planningSlot.key === nextSlot
+    )
 
-    setSlot(nextSlot)
+  setSlot(nextSlot)
 
-    if (slotConfiguration) {
-      setStart(slotConfiguration.start)
-      setEnd(slotConfiguration.end)
-    }
+  if (slotConfiguration) {
+    setStart(slotConfiguration.start)
+    setEnd(slotConfiguration.end)
   }
+}
 
   async function handleSubmit() {
   if (!date) {
@@ -370,6 +387,13 @@ export default function AddAssignmentDialog({
     )
     return
   }
+
+  const selectedAgent = agents.find(
+  (agent) => String(agent.id) === String(agentId)
+)
+
+const selectedAgentServiceId =
+  selectedAgent?.service_id ?? null
 
   try {
     setSubmitting(true)
@@ -456,6 +480,7 @@ console.log("APPEL updateAssignment", assignmentId)
         agent_id: agentId,
         site_id: siteId,
         service: slot,
+        service_id: selectedAgentServiceId,
         heure_debut: start,
         heure_fin: end,
         statut:
@@ -629,17 +654,17 @@ console.log("APPEL updateAssignment", assignmentId)
 )
               }
             >
-              {planningSlots.map(
-                (planningSlot) => (
-                  <option
-                    key={planningSlot.key}
-                    value={planningSlot.key}
-                  >
-                    {planningSlot.label} —{" "}
-                    {planningSlot.time}
-                  </option>
-                )
-              )}
+              {configuredSlots.map(
+  (planningSlot) => (
+    <option
+      key={planningSlot.key}
+      value={planningSlot.key}
+    >
+      {planningSlot.label} —{" "}
+      {planningSlot.time}
+    </option>
+  )
+)}
             </select>
           </Field>
 
