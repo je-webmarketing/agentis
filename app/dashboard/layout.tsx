@@ -1,6 +1,7 @@
 import Link from "next/link"
 
 import AgentSidebar from "@/components/agentis/layout/AgentSidebar"
+import MobileNavigation from "@/components/agentis/layout/MobileNavigation"
 import LegalAcceptanceGuard from "@/components/agentis/legal/LegalAcceptanceGuard"
 import MaintenanceGuard from "@/components/agentis/system/MaintenanceGuard"
 
@@ -13,12 +14,16 @@ export default function DashboardLayout({
     <MaintenanceGuard>
       <LegalAcceptanceGuard>
         <div className="flex min-h-screen bg-slate-50">
-          <AgentSidebar />
+          <div className="hidden lg:block">
+  <AgentSidebar />
+</div>
 
           <div className="flex min-w-0 flex-1 flex-col">
-            <main className="min-w-0 flex-1">
-              {children}
-            </main>
+  <MobileNavigation />
+
+  <main className="min-w-0 flex-1">
+    {children}
+  </main>
 
             <footer className="border-t border-slate-200 bg-white px-6 py-4">
               <div className="mx-auto flex w-full max-w-[1600px] flex-wrap items-center justify-between gap-3 text-xs text-slate-500">

@@ -39,209 +39,20 @@ import {
 
 import { createClient } from "@/lib/supabase/client"
 
+import {
+  administrationItems,
+  agentItems,
+  mainItems,
+  organisationItems,
+  rhItems,
+  type NavigationItem,
+} from "./navigationItems"
 
 import type {
   PermissionKey,
   SecurityRoleKey,
 } from "@/lib/security/types"
 
-type NavigationItem = {
-  label: string
-  href: string
-  icon: LucideIcon
-  permission?: PermissionKey
-  exact?: boolean
-}
-
-/*
- * =========================================================
- * PILOTAGE
- * =========================================================
- */
-
-const mainItems: NavigationItem[] = [
-  {
-    label: "Dashboard",
-    href: "/dashboard",
-    icon: LayoutDashboard,
-    permission: "dashboard.view",
-    exact: true,
-  },
-  {
-    label: "Cockpit RH",
-    href: "/dashboard/cockpit",
-    icon: Gauge,
-    permission: "supervision.view",
-  },
-  {
-    label: "Intelligence",
-    href: "/dashboard/intelligence",
-    icon: BrainCircuit,
-    permission: "supervision.view",
-  },
-  {
-    label: "Planning",
-    href: "/dashboard/planning",
-    icon: CalendarDays,
-    permission: "planning.view",
-    exact: true,
-  },
-  {
-    label: "Besoins en effectifs",
-    href: "/dashboard/planning/besoins",
-    icon: ClipboardList,
-    permission: "planning.view",
-  },
-  {
-    label: "Historique planning",
-    href: "/dashboard/planning/historique",
-    icon: History,
-    permission: "planning.view",
-  },
-]
-
-/*
- * =========================================================
- * RESSOURCES HUMAINES
- * =========================================================
- */
-
-const rhItems: NavigationItem[] = [
-  {
-    label: "Agents",
-    href: "/dashboard/agents",
-    icon: UsersRound,
-    permission: "agents.view",
-    exact: true,
-  },
-  {
-    label: "Historique RH",
-    href: "/dashboard/agents/historique",
-    icon: UserRoundSearch,
-    permission: "agents.view",
-  },
-  {
-    label: "Absences",
-    href: "/dashboard/absences",
-    icon: Clock3,
-    permission: "absences.view",
-  },
-  {
-    label: "Temps & 1607h",
-    href: "/dashboard/temps",
-    icon: ChartNoAxesCombined,
-    permission: "temps.view",
-  },
-  {
-    label: "Documents RH",
-    href: "/dashboard/documents",
-    icon: FileText,
-    permission: "documents.view",
-  },
-  {
-    label: "Rapports RH",
-    href: "/dashboard/rapports",
-    icon: Workflow,
-    permission: "rapports.view",
-  },
-]
-
-/*
- * =========================================================
- * ORGANISATION
- * =========================================================
- */
-
-const organisationItems: NavigationItem[] = [
-  {
-    label: "Sites",
-    href: "/dashboard/sites",
-    icon: MapPin,
-    permission: "sites.view",
-  },
-  {
-    label: "Services",
-    href: "/dashboard/services",
-    icon: Network,
-    permission: "services.view",
-  },
-  {
-    label: "Postes",
-    href: "/dashboard/postes",
-    icon: Building2,
-    permission: "postes.view",
-  },
-  {
-    label: "Structures",
-    href: "/dashboard/structures",
-    icon: ShieldCheck,
-    permission: "structures.view",
-  },
-  {
-    label: "Périscolaire",
-    href: "/dashboard/periscolaire",
-    icon: School,
-
-    /*
-     * Il n'existe pas encore de module
-     * "periscolaire" dans PermissionModule.
-     *
-     * On le rattache donc pour l'instant
-     * à structures.view.
-     */
-    permission: "structures.view",
-  },
-]
-
-/*
- * =========================================================
- * ADMINISTRATION
- * =========================================================
- */
-
-const administrationItems: NavigationItem[] = [
-  {
-    label: "Administration",
-    href: "/dashboard/administration",
-    icon: ShieldCheck,
-    permission: "administration.view",
-  },
-]
-
-/*
- * =========================================================
- * ESPACE PERSONNEL AGENT
- * =========================================================
- */
-
-const agentItems: NavigationItem[] = [
-  {
-    label: "Mon espace",
-    href: "/dashboard/mon-espace",
-    icon: LayoutDashboard,
-    exact: true,
-  },
-  {
-    label: "Mon planning",
-    href: "/dashboard/mon-espace#planning",
-    icon: CalendarDays,
-  },
-  {
-    label: "Mes formations",
-    href: "/dashboard/mon-espace#formations",
-    icon: GraduationCap,
-  },
-  {
-    label: "Mes documents",
-    href: "/dashboard/mon-espace#documents",
-    icon: FileText,
-  },
-  {
-    label: "Mes absences",
-    href: "/dashboard/mon-espace#absences",
-    icon: Clock3,
-  },
-]
 
 export default function AgentSidebar() {
   const pathname = usePathname()
@@ -914,21 +725,55 @@ function MenuGroup({
   children: React.ReactNode
   collapsed: boolean
 }) {
+  const [open, setOpen] = useState(true)
+
+  /*
+   * Quand toute la sidebar est repliée,
+   * on conserve les icônes des modules visibles.
+   */
+  if (collapsed) {
+    return (
+      <section>
+        <div className="mx-auto mb-2 h-px w-8 bg-slate-200" />
+
+        <div className="space-y-1.5">
+          {children}
+        </div>
+      </section>
+    )
+  }
+
   return (
     <section>
-      {!collapsed && (
-        <h2 className="mb-2.5 px-3 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">
-          {title}
-        </h2>
-      )}
+      <button
+        type="button"
+        onClick={() =>
+          setOpen(
+            (current) => !current
+          )
+        }
+        aria-expanded={open}
+        className="mb-2 flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500 transition hover:bg-slate-50 hover:text-slate-800"
+      >
+        <span>{title}</span>
 
-      {collapsed && (
-        <div className="mx-auto mb-2 h-px w-8 bg-slate-200" />
-      )}
+        <span
+          className={`text-sm transition-transform duration-200 ${
+            open
+              ? "rotate-90"
+              : ""
+          }`}
+          aria-hidden="true"
+        >
+          ›
+        </span>
+      </button>
 
-      <div className="space-y-1.5">
-        {children}
-      </div>
+      {open && (
+        <div className="space-y-1.5">
+          {children}
+        </div>
+      )}
     </section>
   )
 }
