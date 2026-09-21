@@ -520,7 +520,7 @@ if (
         login_identifier: event.target.value,
       }))
     }
-    placeholder="Ex. sarah.achab"
+    placeholder="Ex. eric.jarry"
     autoComplete="username"
     className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
   />

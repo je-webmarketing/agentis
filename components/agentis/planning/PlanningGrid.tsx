@@ -393,12 +393,12 @@ console.log(
 )
 
 console.log(
-  "CANDIDATS PERISCOLAIRE:",
+  "TEST AFFECTATION JARRY:",
   Array.isArray(candidatesData)
     ? candidatesData.filter(
         (candidate) =>
-          String(candidate.service_id) === "5" ||
-candidate.est_polyvalent === true
+          Number(candidate.site_id) === 8 &&
+          Number(candidate.service_id) === 6
       )
     : []
 )
@@ -1298,7 +1298,7 @@ const sourceSlotConfig = configuredPlanningSlots.find(
         .update({
           agent_id: agentId,
           service: null,
-          service_id: 5,
+          service_id: periscolaireSite.serviceId,
           statut: "Présent",
           est_poste_vacant: false,
         })
@@ -1312,10 +1312,11 @@ const sourceSlotConfig = configuredPlanningSlots.find(
       }
     } else {
       await PlanningService.createPeriscolaireAssignment({
-        date: selectedDate,
-        agentId,
-        siteId: periscolaireSite.id,
-      })
+  date: selectedDate,
+  agentId,
+  siteId: periscolaireSite.id,
+  serviceId: periscolaireSite.serviceId!,
+})
     }
 
     setPeriscolaireSite(null)
@@ -1331,8 +1332,20 @@ const sourceSlotConfig = configuredPlanningSlots.find(
   }
 }
 
-const gridTemplateColumns =
-  `170px repeat(${visiblePlanningSlots.length}, minmax(145px, 1fr)) repeat(${visibleServiceColumns.length}, minmax(145px, 1fr)) 100px`
+const gridTemplateColumns = [
+  "170px",
+  ...visiblePlanningSlots.map((slot) => {
+    const column = visiblePlanningColumns.find(
+      (item) => item.column_key === slot.key
+    )
+
+    return `${column?.width_px ?? 160}px`
+  }),
+  ...visibleServiceColumns.map(
+    (column) => `${column.width_px ?? 160}px`
+  ),
+  "100px",
+].join(" ")
 
   if (loading) {
     return (
@@ -1544,6 +1557,7 @@ async function deletePeriscolaireAssignment(
     onDeleteVacancy={deleteVacancy}
     onDuplicateAssignment={duplicateAssignment}
     onMoveAgent={moveAgent}
+ onDeletePeriscolaireAssignment={deletePeriscolaireAssignment}   
  onAddPeriscolaireAgent={(
   siteId,
   siteName,
@@ -1713,12 +1727,14 @@ async function deletePeriscolaireAssignment(
            planningCandidates
   .filter(
     (candidate) =>
-      String(candidate.structure_id) ===
-        String(planningStructureId) &&
+      candidate.est_polyvalent === true ||
       (
+        String(candidate.structure_id) ===
+          String(planningStructureId) &&
+        String(candidate.site_id) ===
+          String(periscolaireSite.id) &&
         String(candidate.service_id) ===
-          String(periscolaireSite.serviceId) ||
-        candidate.est_polyvalent === true
+          String(periscolaireSite.serviceId)
       )
   )
   .map((candidate) => (

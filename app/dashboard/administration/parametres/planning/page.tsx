@@ -190,6 +190,32 @@ async function saveTimes(
   )
 }
 
+async function saveWidth(
+  column: PlanningColumn,
+  widthPx: number
+) {
+  const safeWidth = Math.max(
+    90,
+    Math.min(500, widthPx)
+  )
+
+  await PlanningColumnsService.updateWidth(
+    column.id,
+    safeWidth
+  )
+
+  setColumns((current) =>
+    current.map((item) =>
+      item.id === column.id
+        ? {
+            ...item,
+            width_px: safeWidth,
+          }
+        : item
+    )
+  )
+}
+
 async function moveColumn(
   column: PlanningColumn,
   direction: "up" | "down"
@@ -691,6 +717,36 @@ async function createColumn() {
     </div>
   </div>
 )}
+
+<div className="min-w-[150px]">
+  <p className="text-xs font-bold uppercase text-slate-400">
+    Largeur
+  </p>
+
+  <div className="mt-2 flex items-center gap-2">
+    <input
+      type="number"
+      min={90}
+      max={500}
+      step={10}
+      defaultValue={column.width_px}
+      onBlur={(event) => {
+        const widthPx = Number(event.target.value)
+
+        if (!Number.isFinite(widthPx)) {
+          return
+        }
+
+        void saveWidth(column, widthPx)
+      }}
+      className="w-20 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-bold"
+    />
+
+    <span className="text-sm font-semibold text-slate-500">
+      px
+    </span>
+  </div>
+</div>
 
         <div className="min-w-[130px]">
   <p className="text-xs font-bold uppercase text-slate-400">

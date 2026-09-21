@@ -19,6 +19,7 @@ import AgentEngine, {
 } from "@/lib/services/AgentEngine"
 import { supabase } from "@/lib/supabase"
 
+import AffectationsTab from "./tabs/AffectationsTab"
 import CompetencesTab from "./tabs/CompetencesTab"
 import ContratTab from "./tabs/ContratTab"
 import CoordonneesTab from "./tabs/CoordonneesTab"
@@ -109,6 +110,7 @@ const tabs = [
   "Identité",
   "Coordonnées",
   "Contrat",
+  "Affectations",
   "Formations",
   "Compétences",
   "Habilitations",
@@ -117,6 +119,8 @@ const tabs = [
   "Absences",
   "Documents",
 ]
+
+// TEST AFFECTATIONS 2026
 
 export default function AgentProfile() {
  const params = useParams()
@@ -137,7 +141,8 @@ const [activeTab, setActiveTab] =
     string
   > = {
     contrat: "Contrat",
-    formations: "Formations",
+affectations: "Affectations",
+formations: "Formations",
     habilitations: "Habilitations",
     "visites-medicales":
       "Visites médicales",
@@ -1210,6 +1215,10 @@ onEstPolyvalentChange={setEstPolyvalent}
                   {activeTab === "Contrat" && (
                     <ContratTab agentId={id} />
                   )}
+
+                  {activeTab === "Affectations" && (
+  <AffectationsTab agentId={id} />
+)}
 
                   {activeTab === "Formations" && (
                     <FormationsTab agentId={id} />

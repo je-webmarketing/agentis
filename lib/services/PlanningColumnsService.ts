@@ -12,9 +12,10 @@ export type PlanningColumn = {
   service_id: string | number | null
   start_time: string | null
   end_time: string | null
-  display_order: number
-  visible: boolean
-  active: boolean
+ display_order: number
+width_px: number
+visible: boolean
+active: boolean
 }
 
 export const PlanningColumnsService = {
@@ -34,9 +35,10 @@ export const PlanningColumnsService = {
         service_id,
         start_time,
         end_time,
-        display_order,
-        visible,
-        active
+       display_order,
+width_px,
+visible,
+active
         `
       )
       .eq("structure_id", structureId)
@@ -90,6 +92,21 @@ async updateTimes(
     .update({
       start_time: startTime,
       end_time: endTime,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", columnId)
+
+  if (error) throw error
+},
+
+async updateWidth(
+  columnId: string | number,
+  widthPx: number
+): Promise<void> {
+  const { error } = await supabase
+    .from("planning_columns")
+    .update({
+      width_px: widthPx,
       updated_at: new Date().toISOString(),
     })
     .eq("id", columnId)

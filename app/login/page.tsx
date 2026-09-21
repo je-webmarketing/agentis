@@ -244,7 +244,7 @@ export default function LoginPage() {
       )
     }
     disabled={submitting}
-    placeholder="sarah.achab ou vous@exemple.fr"
+    placeholder="votre.identifiant@exemple.fr"
     className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-400 disabled:cursor-wait disabled:bg-slate-100"
   />
 </label>

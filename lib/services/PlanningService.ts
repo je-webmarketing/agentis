@@ -902,6 +902,7 @@ async createAssignment(
   date: string
   agentId: string | number
   siteId: string | number
+  serviceId: string | number
 }) {
   const { data, error } = await supabase
     .from("planning_journalier")
@@ -910,11 +911,11 @@ async createAssignment(
       agent_id: params.agentId,
       site_id: params.siteId,
       service: null,
-      service_id: 5,
+      service_id: params.serviceId,
       heure_debut: null,
       heure_fin: null,
       statut: "Présent",
-      commentaire: "Affectation périscolaire",
+      commentaire: "Affectation service",
       est_poste_vacant: false,
     })
     .select(planningSelect)

@@ -287,6 +287,19 @@ export const AgentService = {
   const { data, error } = await supabase
     .rpc("planning_candidate_agents")
 
+ console.log(
+  "JARRY DANS PLANNING:",
+  data?.filter(
+    (agent: { nom: string | null }) =>
+      agent.nom?.toUpperCase().includes("JARRY")
+  )
+)
+
+  console.log(
+    "PLANNING CANDIDATES ERROR:",
+    error
+  )
+
   if (error) throw error
 
   return data ?? []
