@@ -507,13 +507,8 @@ const sites: string[] =
 
         {/* PLANNING OPÉRATIONNEL */}
 
-        <div
-          className="grid items-start gap-6"
-          style={{
-            gridTemplateColumns:
-              "minmax(0, 1fr) 320px",
-          }}
-        >
+        <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+          
           <PlanningGrid
             selectedDate={
               selectedDate

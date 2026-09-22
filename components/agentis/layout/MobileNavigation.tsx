@@ -1,7 +1,10 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import {
+  usePathname,
+  useRouter,
+} from "next/navigation"
 import {
   useEffect,
   useMemo,
@@ -10,8 +13,10 @@ import {
 
 import {
   Loader2,
+  LogOut,
   Menu,
   Network,
+  ShieldCheck,
   X,
 } from "lucide-react"
 
@@ -33,17 +38,24 @@ import {
 
 export default function MobileNavigation() {
   const pathname = usePathname()
+  const router = useRouter()
 
   const [open, setOpen] = useState(false)
 
   const [userRole, setUserRole] =
     useState<SecurityRoleKey | null>(null)
 
+  const [customRoleName, setCustomRoleName] =
+    useState<string | null>(null)
+
   const [permissions, setPermissions] =
     useState<PermissionKey[]>([])
 
   const [loadingRole, setLoadingRole] =
     useState(true)
+
+  const [signingOut, setSigningOut] =
+    useState(false)
 
   /*
    * =========================================================
@@ -70,6 +82,7 @@ export default function MobileNavigation() {
         if (!session?.access_token) {
           if (mounted) {
             setUserRole(null)
+            setCustomRoleName(null)
             setPermissions([])
           }
 
@@ -117,6 +130,13 @@ export default function MobileNavigation() {
             securityUser.system_role
           )
 
+          setCustomRoleName(
+            typeof securityUser.display_role ===
+              "string"
+              ? securityUser.display_role
+              : null
+          )
+
           setPermissions(
             Array.isArray(
               securityUser.permissions
@@ -133,6 +153,7 @@ export default function MobileNavigation() {
 
         if (mounted) {
           setUserRole(null)
+          setCustomRoleName(null)
           setPermissions([])
         }
       } finally {
@@ -244,6 +265,39 @@ export default function MobileNavigation() {
 
   /*
    * =========================================================
+   * DÉCONNEXION
+   * =========================================================
+   */
+
+  async function handleSignOut() {
+    try {
+      setSigningOut(true)
+
+      const supabase = createClient()
+
+      const { error } =
+        await supabase.auth.signOut()
+
+      if (error) {
+        throw error
+      }
+
+      setOpen(false)
+
+      router.replace("/login")
+      router.refresh()
+    } catch (error) {
+      console.error(
+        "Erreur lors de la déconnexion :",
+        error
+      )
+
+      setSigningOut(false)
+    }
+  }
+
+  /*
+   * =========================================================
    * AFFICHAGE
    * =========================================================
    */
@@ -323,6 +377,8 @@ export default function MobileNavigation() {
           </button>
         </div>
 
+        {/* NAVIGATION */}
+
         <div className="flex-1 overflow-y-auto p-5">
           {loadingRole ? (
             <div className="flex justify-center py-10">
@@ -395,6 +451,54 @@ export default function MobileNavigation() {
             </div>
           )}
         </div>
+
+        {/* UTILISATEUR / DÉCONNEXION */}
+
+        {!loadingRole && userRole && (
+          <footer className="shrink-0 border-t border-slate-200 bg-white p-4">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-amber-200 bg-amber-50 text-amber-700">
+                  <ShieldCheck className="h-4 w-4" />
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-slate-900">
+                    {getRoleLabel(
+                      userRole,
+                      customRoleName
+                    )}
+                  </p>
+
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    AGENTIS v1.0
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  void handleSignOut()
+                }
+                disabled={signingOut}
+                className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 bg-white px-3 py-2.5 text-sm font-semibold text-red-600 transition hover:border-red-300 hover:bg-red-50 disabled:cursor-wait disabled:opacity-60"
+              >
+                {signingOut ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <LogOut className="h-4 w-4" />
+                )}
+
+                <span>
+                  {signingOut
+                    ? "Déconnexion…"
+                    : "Se déconnecter"}
+                </span>
+              </button>
+            </div>
+          </footer>
+        )}
       </aside>
     </div>
   )
@@ -419,55 +523,88 @@ function MobileMenuGroup({
   ) => boolean
   onNavigate: () => void
 }) {
+  const containsActiveItem =
+    items.some((item) =>
+      isActive(item)
+    )
+
+  const [open, setOpen] =
+    useState(containsActiveItem)
+
   return (
-    <section className="mb-7">
-      <h2 className="mb-2 px-2 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">
-        {title}
-      </h2>
-
-      <div className="space-y-1">
-        {items.map((item) => {
-          const Icon = item.icon
-          const active = isActive(item)
-
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={onNavigate}
-              aria-current={
-                active
-                  ? "page"
-                  : undefined
-              }
-              className={`flex min-h-12 items-center gap-3 rounded-xl border px-3 py-3 text-sm font-medium transition ${
-                active
-                  ? "border-amber-200 bg-amber-50 text-amber-800"
-                  : "border-transparent text-slate-700 hover:bg-slate-50"
-              }`}
-            >
-              <Icon
-                className={`h-5 w-5 shrink-0 ${
-                  active
-                    ? "text-amber-600"
-                    : "text-slate-400"
-                }`}
-              />
-
-              <span>
-                {item.label}
-              </span>
-            </Link>
+    <section className="mb-3">
+      <button
+        type="button"
+        onClick={() =>
+          setOpen(
+            (current) => !current
           )
-        })}
-      </div>
+        }
+        aria-expanded={open}
+        className="flex w-full items-center justify-between rounded-xl px-3 py-3 text-left text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500 transition hover:bg-slate-50 hover:text-slate-800"
+      >
+        <span>
+          {title}
+        </span>
+
+        <span
+          className={`text-lg leading-none transition-transform duration-200 ${
+            open
+              ? "rotate-90"
+              : ""
+          }`}
+          aria-hidden="true"
+        >
+          ›
+        </span>
+      </button>
+
+      {open && (
+        <div className="mt-1 space-y-1">
+          {items.map((item) => {
+            const Icon = item.icon
+            const active =
+              isActive(item)
+
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={onNavigate}
+                aria-current={
+                  active
+                    ? "page"
+                    : undefined
+                }
+                className={`flex min-h-12 items-center gap-3 rounded-xl border px-3 py-3 text-sm font-medium transition ${
+                  active
+                    ? "border-amber-200 bg-amber-50 text-amber-800"
+                    : "border-transparent text-slate-700 hover:bg-slate-50"
+                }`}
+              >
+                <Icon
+                  className={`h-5 w-5 shrink-0 ${
+                    active
+                      ? "text-amber-600"
+                      : "text-slate-400"
+                  }`}
+                />
+
+                <span>
+                  {item.label}
+                </span>
+              </Link>
+            )
+          })}
+        </div>
+      )}
     </section>
   )
 }
 
 /*
  * =========================================================
- * RÔLES
+ * HELPERS
  * =========================================================
  */
 
@@ -482,4 +619,36 @@ function isSecurityRole(
     value === "chef_service" ||
     value === "agent"
   )
+}
+
+function getRoleLabel(
+  role: string,
+  customRoleName?: string | null
+) {
+  if (customRoleName) {
+    return customRoleName
+  }
+
+  switch (role) {
+    case "super_admin":
+      return "Super administrateur"
+
+    case "admin_rh":
+      return "Administrateur RH"
+
+    case "responsable_rh":
+      return "Responsable RH"
+
+    case "responsable_site":
+      return "Responsable de site"
+
+    case "chef_service":
+      return "Chef de service"
+
+    case "agent":
+      return "Agent"
+
+    default:
+      return "Utilisateur"
+  }
 }

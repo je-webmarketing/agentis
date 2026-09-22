@@ -7,6 +7,7 @@ import {
   useState,
 } from "react"
 import PlanningSiteRow from "./PlanningSiteRow"
+import PlanningMobileView from "./PlanningMobileView"
 import { planningSlots } from "@/lib/planning/slots"
 import { PlanningService } from "@/lib/services/PlanningService"
 import { SiteService } from "@/lib/services/SiteService"
@@ -202,6 +203,14 @@ export default function PlanningGrid({
 
 const [editSource, setEditSource] =
   useState<PlanningRow | null>(null)
+
+const [
+  mobileCreateSource,
+  setMobileCreateSource,
+] = useState<{
+  siteId: string | number
+  slotKey: string
+} | null>(null)
 
  const [
   duplicateSource,
@@ -1479,8 +1488,18 @@ async function deletePeriscolaireAssignment(
               Glissez une affectation vers un autre créneau pour la déplacer.
             </div>
           </div>
+         <PlanningMobileView
+  sites={sites}
+  slots={configuredPlanningSlots}
+  onAddAssignment={(siteId, slotKey) => {
+    setMobileCreateSource({
+      siteId,
+      slotKey,
+    })
+  }}
+/>
 
-          <div className="overflow-x-auto">
+          <div className="hidden overflow-x-auto lg:block">
           <div className="min-w-[1380px]">
             <div
               className="sticky top-0 z-20 grid border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500"
@@ -1605,6 +1624,33 @@ async function deletePeriscolaireAssignment(
         </div>
         </>
       )}
+
+<AddAssignmentDialog
+  open={mobileCreateSource !== null}
+  mode="create"
+  selectedDate={selectedDate}
+  configuredSlots={configuredPlanningSlots}
+  initialValues={
+    mobileCreateSource
+      ? {
+          siteId: mobileCreateSource.siteId,
+          date: selectedDate,
+          slot: mobileCreateSource.slotKey as
+            (typeof planningSlots)[number]["key"],
+        }
+      : null
+  }
+  onClose={() => {
+    setMobileCreateSource(null)
+  }}
+  onAssignmentCreated={async () => {
+    setMobileCreateSource(null)
+
+    await refreshAfterMutation(
+      selectedDate
+    )
+  }}
+/>
 
 <AddAssignmentDialog
   open={editSource !== null}
