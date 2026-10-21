@@ -5,6 +5,7 @@ import ExportPlanningPdfButton from "./ExportPlanningPdfButton"
 
 import PlanningHeader from "@/components/agentis/planning/PlanningHeader"
 import PlanningToolbar from "@/components/agentis/planning/PlanningToolbar"
+import PlanningDateNavigation, { PlanningDateInput } from "@/components/agentis/planning/PlanningDateNavigation"
 import PlanningGrid from "@/components/agentis/planning/PlanningGrid"
 import PlanningSidebar from "@/components/agentis/planning/PlanningSidebar"
 
@@ -284,6 +285,7 @@ const sites: string[] =
    */
 
   return (
+    <PlanningDateNavigation selectedDate={selectedDate}>
     <main className="min-h-screen bg-slate-100 px-4 py-6 text-slate-900 sm:px-6 xl:px-8">
       <div className="w-full space-y-6">
 
@@ -342,9 +344,7 @@ const sites: string[] =
 
         {/* TOOLBAR */}
 
-        <PlanningToolbar
-          selectedDate={selectedDate}
-        />
+        <PlanningToolbar />
 
         {/* ACTIONS */}
 
@@ -394,16 +394,13 @@ const sites: string[] =
           className="grid gap-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm lg:grid-cols-[1fr_1fr_1fr_auto]"
         >
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-600">
+            <label htmlFor="planning-filter-date" className="mb-2 block text-sm font-medium text-slate-600">
               Date
             </label>
 
-            <input
-              type="date"
+            <PlanningDateInput
+              id="planning-filter-date"
               name="date"
-              defaultValue={
-                selectedDate
-              }
               className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-amber-400"
             />
           </div>
@@ -630,6 +627,7 @@ const sites: string[] =
         )}
       </div>
     </main>
+    </PlanningDateNavigation>
   )
 }
 

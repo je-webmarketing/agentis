@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { PlanningDateInput, usePlanningDateNavigation } from "./PlanningDateNavigation"
 import {
   CalendarDays,
   ChevronLeft,
@@ -22,10 +23,6 @@ import {
   useEffect,
   useState,
 } from "react"
-
-type PlanningToolbarProps = {
-  selectedDate: string
-}
 
 function getTodayIso() {
   return new Date().toISOString().slice(0, 10)
@@ -62,9 +59,8 @@ function formatLongDate(isoDate: string) {
   )
 }
 
-export default function PlanningToolbar({
-  selectedDate,
-}: PlanningToolbarProps) {
+export default function PlanningToolbar() {
+  const { date: selectedDate, navigateToDate } = usePlanningDateNavigation()
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -87,25 +83,6 @@ export default function PlanningToolbar({
 
     document.cookie = `agentis_active_date=${selectedDate}; Path=/; Max-Age=31536000; SameSite=Lax`
   }, [selectedDate])
-
-  function navigateToDate(date: string) {
-    const params = new URLSearchParams(
-      searchParams.toString()
-    )
-
-    params.set("date", date)
-
-    window.localStorage.setItem(
-      "agentis_active_date",
-      date
-    )
-
-    document.cookie = `agentis_active_date=${date}; Path=/; Max-Age=31536000; SameSite=Lax`
-
-    router.push(
-      `${pathname}?${params.toString()}`
-    )
-  }
 
   function submitSearch(
     event: React.FormEvent<HTMLFormElement>
@@ -182,6 +159,10 @@ export default function PlanningToolbar({
             <div className="mt-1 text-sm font-medium text-slate-700">
               {formatLongDate(selectedDate)}
             </div>
+            <PlanningDateInput
+              id="planning-toolbar-date"
+              className="mt-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+            />
           </div>
 
           <button
