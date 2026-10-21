@@ -405,6 +405,7 @@ const selectedAgentServiceId =
         date,
         heure_debut: start,
         heure_fin: end,
+        excludeAssignmentId: isEdit ? assignmentId : undefined,
       })
 
 

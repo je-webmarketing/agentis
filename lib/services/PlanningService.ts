@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase"
 import { agentisCore } from "@/lib/core"
+import AvailabilityEngine from "@/lib/services/AvailabilityEngine"
 
 export type PlanningAssignmentPayload = {
   date: string
@@ -14,7 +15,9 @@ export type PlanningAssignmentPayload = {
 }
 
 export type PlanningAssignmentUpdate =
-  Partial<PlanningAssignmentPayload>
+  Partial<PlanningAssignmentPayload> & {
+    est_poste_vacant?: boolean
+  }
 
 const planningSelect = `
   *,
@@ -216,6 +219,8 @@ async getUncoveredPosts(date: string) {
 async createAssignment(
   payload: PlanningAssignmentPayload
 ) {
+  await AvailabilityEngine.ensureAvailable(payload.agent_id, payload.date)
+
   const conflict = await this.findAgentConflict({
     agentId: payload.agent_id,
     date: payload.date,
@@ -329,6 +334,10 @@ async createAssignment(
 
     const nextDate =
       payload.date ?? before.date
+
+    if (nextAgentId !== null && nextAgentId !== undefined) {
+      await AvailabilityEngine.ensureAvailable(nextAgentId, nextDate)
+    }
 
     const nextStart =
       payload.heure_debut !== undefined
@@ -528,6 +537,8 @@ async createAssignment(
         continue
       }
 
+      await AvailabilityEngine.ensureAvailable(assignment.agent_id, targetDate)
+
       const conflict =
         await this.findAgentConflict({
           agentId: assignment.agent_id,
@@ -693,6 +704,10 @@ async createAssignment(
   }) {
     const currentAssignment =
       await this.getById(params.assignmentId)
+
+    if (currentAssignment.agent_id !== null && currentAssignment.agent_id !== undefined) {
+      await AvailabilityEngine.ensureAvailable(currentAssignment.agent_id, currentAssignment.date)
+    }
 
     const conflict =
       await this.findAgentConflict({
@@ -904,6 +919,8 @@ async createAssignment(
   siteId: string | number
   serviceId: string | number
 }) {
+  await AvailabilityEngine.ensureAvailable(params.agentId, params.date)
+
   const { data, error } = await supabase
     .from("planning_journalier")
     .insert({
@@ -958,6 +975,8 @@ async createAssignment(
     end: string | null
     commentaire?: string | null
   }) {
+    await AvailabilityEngine.ensureAvailable(params.agentId, params.date)
+
     const conflict =
       await this.findAgentConflict({
         agentId: params.agentId,

@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase"
 import { agentisCore } from "@/lib/core"
+import AvailabilityEngine from "@/lib/services/AvailabilityEngine"
 import {
   mapPosteToRequirementRole,
 } from "@/lib/planning/roleMapping"
@@ -180,6 +181,8 @@ async assignCandidate(params: {
     const vacancy = await loadVacancy(
       params.vacancyId
     )
+
+    await AvailabilityEngine.ensureAvailable(params.agentId, vacancy.date)
 
     const candidates = await this.getCandidates(
       params.vacancyId
@@ -428,7 +431,7 @@ function buildCandidate(
       (absence) =>
         String(absence.agent_id) ===
           String(agent.id) &&
-        absence.statut_validation !== "Refusée"
+        absence.statut_validation === "Validée"
     )
 
  const hasAssignedSite =

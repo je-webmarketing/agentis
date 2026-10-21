@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
+import AvailabilityEngine from "@/lib/services/AvailabilityEngine"
 
 export default function NewPlanningPage() {
   const router = useRouter()
@@ -44,6 +45,13 @@ export default function NewPlanningPage() {
     }
 
     if (statut === "Présent") {
+      try {
+        await AvailabilityEngine.ensureAvailable(agentId, dateDebut)
+      } catch (error) {
+        alert(error instanceof Error ? error.message : "Impossible de vérifier la disponibilité de l’agent.")
+        return
+      }
+
       const { error } = await supabase.from("planning").insert([
         {
           agent_id: Number(agentId),
