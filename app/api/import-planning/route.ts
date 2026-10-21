@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { supabase } from "@/lib/supabase"
+import AvailabilityEngine from "@/lib/services/AvailabilityEngine"
 
 export async function POST(request: Request) {
   const body = await request.json()
@@ -9,6 +10,35 @@ export async function POST(request: Request) {
   let agentsCrees = 0
   let sitesCrees = 0
   let lignesIgnorees = 0
+
+  // Contrôler tout le lot avant la suppression du planning ou la création
+  // de sites/agents : un refus ne doit laisser aucune écriture partielle.
+  try {
+    for (const item of affectations) {
+      const nom = item.nom
+        ?.replace(/\/?\d+h\d*/gi, "")
+        ?.replace(/-\s*$/g, "")
+        ?.trim()
+
+      if (!nom) continue
+
+      const { data: agent, error } = await supabase
+        .from("agents")
+        .select("id")
+        .ilike("nom", nom)
+        .maybeSingle()
+
+      if (error) throw error
+      if (agent) {
+        await AvailabilityEngine.ensureAvailable(agent.id, date)
+      }
+    }
+  } catch (error) {
+    return NextResponse.json({
+      success: false,
+      message: error instanceof Error ? error.message : "Impossible de vérifier la disponibilité des agents.",
+    }, { status: 409 })
+  }
 
   await supabase
     .from("planning_journalier")

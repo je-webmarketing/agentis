@@ -1302,23 +1302,16 @@ const sourceSlotConfig = configuredPlanningSlots.find(
     setErrorMessage("")
 
     if (periscolaireSite.replaceAssignmentId) {
-      const { error } = await supabase
-        .from("planning_journalier")
-        .update({
+      await PlanningService.updateAssignment(
+        periscolaireSite.replaceAssignmentId,
+        {
           agent_id: agentId,
           service: null,
           service_id: periscolaireSite.serviceId,
           statut: "Présent",
           est_poste_vacant: false,
-        })
-        .eq(
-          "id",
-          periscolaireSite.replaceAssignmentId
-        )
-
-      if (error) {
-        throw error
-      }
+        }
+      )
     } else {
       await PlanningService.createPeriscolaireAssignment({
   date: selectedDate,

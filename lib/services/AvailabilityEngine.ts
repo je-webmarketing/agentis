@@ -53,7 +53,7 @@ export const AvailabilityEngine = {
       .from("absences")
       .select("id,type,date_debut,date_fin,statut_validation")
       .eq("agent_id", agentId)
-      .neq("statut_validation", "Refusée")
+      .eq("statut_validation", "Validée")
       .lte("date_debut", date)
       .gte("date_fin", date)
       .order("date_debut", { ascending: true })
@@ -103,7 +103,7 @@ export const AvailabilityEngine = {
 
     if (!result.available) {
       throw new Error(
-        `Affectation impossible : l’agent est indisponible (${result.reason}).`
+        `Affectation impossible : l’agent possède une absence validée couvrant le ${formatDate(date)} (${result.reason}).`
       )
     }
 

@@ -28,7 +28,7 @@ export const PlanningValidator = {
      * 1. Contrôle bloquant de disponibilité RH.
      *
      * Un agent absent, en congé, en RTT, en maladie
-     * ou dans toute autre absence non refusée ne peut
+     * ou dans toute autre absence validée ne peut
      * jamais être affecté sur cette journée.
      */
     try {
@@ -40,7 +40,7 @@ export const PlanningValidator = {
 
       if (!availability.available) {
         errors.push(
-          `Cet agent est indisponible : ${
+          `Cet agent possède une absence validée couvrant cette date : ${
             availability.reason ||
             "une absence couvre cette date"
           }.`

@@ -1,10 +1,6 @@
 import "server-only"
 import OpenAI from "openai"
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-})
-
 export const AgentisAIService = {
   async testConnection(): Promise<string> {
     if (!process.env.OPENAI_API_KEY) {
@@ -12,6 +8,10 @@ export const AgentisAIService = {
         "OPENAI_API_KEY est manquante."
       )
     }
+
+    const openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    })
 
     const response =
       await openai.responses.create({
